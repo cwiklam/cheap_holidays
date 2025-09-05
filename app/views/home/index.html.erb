@@ -1,0 +1,54 @@
+<div class="min-h-screen bg-base-100">
+  <div class="navbar bg-base-200 shadow-sm mb-8">
+    <div class="flex-1">
+      <span class="text-xl font-bold px-2">Cheap Holidays</span>
+    </div>
+    <div class="flex-none flex items-center gap-2 pr-4">
+      <button class="btn btn-sm" data-controller="theme" data-action="click->theme#toggle" aria-label="Przełącz motyw">🌗</button>
+      <a href="https://github.com" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+
+  <main class="container mx-auto px-4">
+    <div class="hero bg-base-200 rounded-lg">
+      <div class="hero-content text-center">
+        <div class="max-w-xl">
+          <h1 class="text-5xl font-bold mb-4">Witaj!</h1>
+          <p class="mb-6 text-lg">Startowa strona aplikacji. Tailwind + DaisyUI są aktywne. Zmień motyw przyciskiem w nawigacji.</p>
+          <div class="flex flex-wrap gap-3 justify-center">
+            <button class="btn btn-primary">Primary</button>
+            <button class="btn btn-secondary">Secondary</button>
+            <button class="btn btn-accent">Accent</button>
+            <button class="btn btn-outline">Outline</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="mt-10 grid gap-6 md:grid-cols-3">
+      <div class="card bg-base-200 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Szybki start</h2>
+          <p>Ta strona jest przykładowym rootem. Dodaj własne treści według potrzeb.</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Stimulus</h2>
+          <p>Kontroler theme_controller.js przełącza motyw DaisyUI.</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Rozszerz</h2>
+          <p>Dodaj komponenty, layouty, autoryzację itd.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-16 py-8 text-center opacity-70 text-sm">
+    &copy; <%= Time.current.year %> Cheap Holidays
+  </footer>
+</div>
+
