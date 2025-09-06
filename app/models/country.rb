@@ -1,3 +1,19 @@
+# == Schema Information
+#
+# Table name: countries
+#
+#  id              :integer          not null, primary key
+#  name            :string           not null
+#  normalized_name :string           not null
+#  iso_code        :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_countries_on_normalized_name  (normalized_name) UNIQUE
+#
+
 # frozen_string_literal: true
 class Country < ApplicationRecord
   before_validation :set_normalized_name

@@ -2,7 +2,7 @@
 # OfferScraper: heurystyczne wyciąganie ofert z pobranego HTML strony biura podróży.
 # Zwraca tablicę hashy: { title:, price:, currency:, starts_on:, url:, raw_text: }
 # Minimalne założenia – można rozszerzać przekazując dodatkowe selektory.
-class OfferScraper
+class ItakaScraper
   DEFAULT_SELECTORS = [
     '[data-testid="offer-list-item-button"]',
     '[data-testid="price"]',
@@ -24,7 +24,18 @@ class OfferScraper
     @html = html.to_s
     @base_url = base_url
     @selectors = selectors
-    @diagnostics = { selectors: selectors, candidate_nodes: 0, filtered_nodes: 0, offers: 0, keyword_title_hits: 0, price_strategy_hits: Hash.new(0), image_alt_hits: 0 }
+    @diagnostics = {
+      selectors: selectors,
+      candidate_nodes: 0,
+      filtered_nodes: 0,
+      offers: 0,
+      keyword_title_hits: 0,
+      price_strategy_hits: Hash.new(0),
+      image_alt_hits: 0,
+      filtered_missing_keyword: 0,
+      filtered_missing_price: 0,
+      filtered_missing_term: 0
+    }
   end
 
   def offers
@@ -76,17 +87,33 @@ class OfferScraper
     name = extract_title(node, text)
     return nil if name.nil? || name.length < 5
 
+    # Wymóg: nazwa musi zawierać jedno ze słów kluczowych
+    unless name =~ TITLE_KEYWORDS_REGEX
+      @diagnostics[:filtered_missing_keyword] += 1
+      return nil
+    end
+
     anchor = pick_anchor(node)
     link_url = anchor ? absolutize_url(anchor['href']) : nil
 
     price_data = extract_price_dom(node) || extract_price_regex(text)
+    unless price_data
+      @diagnostics[:filtered_missing_price] += 1
+      return nil
+    end
+
     range_str = extract_date_range(text)
     unless range_str
       date_value = extract_date(text)
-      range_str = date_value&.strftime('%Y-%m-%d')
+      range_str = date_value&.strftime('%Y-%m-%d') if date_value
     end
+    unless range_str
+      @diagnostics[:filtered_missing_term] += 1
+      return nil
+    end
+
     image_url = extract_image_url(node, anchor)
-    image_url ||= extract_image_by_alt(node, name) # nowy fallback
+    image_url ||= extract_image_by_alt(node, name)
     country = extract_country(node)
 
     {

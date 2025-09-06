@@ -11,7 +11,7 @@ Rails.application.routes.draw do
 
   resources :travel_agencies do
     member do
-      get :offers
+      get :offers, to: 'offers#current'
     end
   end
 
