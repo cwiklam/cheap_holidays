@@ -63,6 +63,9 @@ group :development, :test do
 
   # Load environment variables from .env files
   gem "dotenv-rails"
+
+  gem "factory_bot_rails"
+  gem 'faker'
 end
 
 group :development do

@@ -6,6 +6,7 @@ class CreateTravelAgencies < ActiveRecord::Migration[8.0]
       t.string  :name, null: false
       t.text    :description
       t.string  :url, null: false
+      t.string :next_page_url
 
       t.timestamps
     end
