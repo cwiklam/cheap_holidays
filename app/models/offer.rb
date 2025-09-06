@@ -34,5 +34,37 @@ class Offer < ApplicationRecord
 
   scope :recent, -> { order(created_at: :desc) }
   scope :for_start, ->(date_fragment) { where("starts_on ILIKE ?", "%#{date_fragment}%") if date_fragment.present? }
-end
 
+  DATE_RANGE_REGEX = /(\d{1,2})[.](\d{1,2})(?:[.](\d{4}))?\s*[\-–]\s*(\d{1,2})[.](\d{1,2})[.](\d{4})/
+  DAYS_IN_PAREN_REGEX = /\((\d+)\s*dni\)/i
+
+  def parsed_start_date
+    return @parsed_start_date if defined?(@parsed_start_date)
+    @parsed_start_date = begin
+      str = starts_on.to_s
+      if str =~ DATE_RANGE_REGEX
+        sd, sm, sy_opt, _ed, _em, ey = $1.to_i, $2.to_i, $3, $4.to_i, $5.to_i, $6.to_i
+        sy = sy_opt ? sy_opt.to_i : ey
+        Date.new(sy, sm, sd) rescue nil
+      else
+        Date.parse(str) rescue nil
+      end
+    end
+  end
+
+  def duration_days
+    return @duration_days if defined?(@duration_days)
+    @duration_days = begin
+      str = starts_on.to_s
+      if str =~ DAYS_IN_PAREN_REGEX
+        $1.to_i
+      elsif str =~ DATE_RANGE_REGEX
+        sd, sm, sy_opt, ed, em, ey = $1.to_i, $2.to_i, $3, $4.to_i, $5.to_i, $6.to_i
+        sy = sy_opt ? sy_opt.to_i : ey
+        s = Date.new(sy, sm, sd) rescue nil
+        e = Date.new(ey, em, ed) rescue nil
+        (e - s).to_i if s && e
+      end
+    end
+  end
+end
