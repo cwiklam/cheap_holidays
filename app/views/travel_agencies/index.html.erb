@@ -1,0 +1,36 @@
+<div class="w-full text-left">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold">Travel Agencies</h1>
+    <%= link_to "New Agency", new_travel_agency_path, class: "btn btn-primary" %>
+  </div>
+
+  <% if @travel_agencies.any? %>
+    <div class="overflow-x-auto">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>URL</th>
+            <th>Description</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @travel_agencies.each do |agency| %>
+            <tr>
+              <td><%= link_to agency.name, agency %></td>
+              <td><%= link_to agency.url, agency.url, target: "_blank", rel: "noopener" %></td>
+              <td class="max-w-xs"><%= truncate(agency.description.to_s, length: 60) %></td>
+              <td class="flex gap-2">
+                <%= link_to "Edit", edit_travel_agency_path(agency), class: "btn btn-xs" %>
+                <%= button_to "Delete", agency, method: :delete, data: { confirm: "Are you sure?" }, class: "btn btn-xs btn-error" %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="opacity-70">No agencies yet.</p>
+  <% end %>
+</div>

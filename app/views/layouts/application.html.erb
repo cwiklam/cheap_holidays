@@ -22,14 +22,24 @@
     <%= javascript_importmap_tags %>
   </head>
 
-  <body class="min-h-screen">
-    <div class="container mx-auto mt-4 px-4">
-      <% flash.each do |type, msg| %>
-        <div class="alert alert-info mb-4"><%= msg %></div>
-      <% end %>
-    </div>
-    <main class="container mx-auto mt-28 px-5 flex">
-      <%= yield %>
+  <body class="min-h-screen flex flex-col">
+    <nav class="navbar bg-base-200 shadow-sm fixed top-0 left-0 right-0 z-50">
+      <div class="flex-1">
+        <a href="<%= root_path %>" class="text-xl font-bold px-2">Cheap Holidays</a>
+        <%= link_to "Agencies", travel_agencies_path, class: "btn btn-ghost btn-sm" %>
+      </div>
+      <div class="flex-none flex items-center gap-2 pr-4">
+        <button class="btn btn-sm" data-controller="theme" data-action="click->theme#toggle" aria-label="Przełącz motyw">🌗</button>
+      </div>
+    </nav>
+
+    <main class="flex-1 container mx-auto px-5 pt-28 flex items-center justify-center text-center">
+      <div class="w-full">
+        <% flash.each do |type, msg| %>
+          <div class="alert alert-info mb-4"><%= msg %></div>
+        <% end %>
+        <%= yield %>
+      </div>
     </main>
   </body>
 </html>
