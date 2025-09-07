@@ -3,6 +3,7 @@ class CreateOffers < ActiveRecord::Migration[8.0]
   def change
     create_table :offers do |t|
       t.references :hotel, null: false, foreign_key: true
+      t.references :travel_agency, null: false, foreign_key: true
       t.string  :name, null: false
       t.string  :url
       t.decimal :price, precision: 12, scale: 2

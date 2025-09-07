@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 class OffersController < ApplicationController
-  before_action :set_travel_agency
+  before_action :set_travel_agencies, only: %i[current]
+
+  def index
+    @q = params[:q].to_s.strip
+    @country = params[:country].to_s.strip.presence
+    @agency_id = params[:agency_id].to_s.strip.presence
+    @start_contains = params[:start].to_s.strip.presence
+
+    scope = Offer.includes(:hotel, :country, :travel_agency).order(created_at: :desc)
+    scope = scope.where("offers.name ILIKE ?", "%#{@q}%") if @q.present?
+    scope = scope.where("offers.starts_on ILIKE ?", "%#{@start_contains}%") if @start_contains.present?
+    scope = scope.joins(:country).where("countries.normalized_name = ?", Country.normalize(@country)) if @country.present?
+    scope = scope.where(travel_agency_id: @agency_id) if @agency_id.present?
+
+    @offers = scope.limit(200) # prosty limit bezpieczeństwa
+  end
 
   # GET /travel_agencies/:id/offers
   def current
@@ -22,8 +37,8 @@ class OffersController < ApplicationController
 
   private
 
-  def set_travel_agency
-    @travel_agency = TravelAgency.find(params[:id])
+  def set_travel_agencies
+    @travel_agencies = TravelAgency.includes().all
   end
 
   def fetch_source_html
@@ -106,9 +121,9 @@ class OffersController < ApplicationController
     record.starts_on = offer[:starts_on]
     record.source_fetched_at = Time.current
     record.raw_data = offer
+    record.travel_agency ||= hotel.travel_agency || @travel_agency
     record.save(validate: true)
   rescue ActiveRecord::RecordInvalid
     # Ignore invalid offer snapshot; could log
   end
 end
-

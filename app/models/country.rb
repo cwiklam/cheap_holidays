@@ -16,6 +16,8 @@
 
 # frozen_string_literal: true
 class Country < ApplicationRecord
+  has_many :hotels, dependent: :nullify
+
   before_validation :set_normalized_name
 
   validates :name, presence: true
@@ -32,5 +34,3 @@ class Country < ApplicationRecord
     self.normalized_name = self.class.normalize(name) if name.present?
   end
 end
-
-

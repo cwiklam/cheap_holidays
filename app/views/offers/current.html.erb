@@ -7,7 +7,7 @@
     </div>
   </div>
 
-  <%= form_with url: offers_travel_agency_path(@travel_agency), method: :get, local: true, class: "flex gap-2 items-end" do %>
+  <%= form_with url: offers_current_path, method: :get, local: true, class: "flex gap-2 items-end" do %>
     <div class="flex-1">
       <label class="label" for="q">Search offers</label>
       <input type="text" name="q" id="q" value="<%= @query %>" class="input input-bordered w-full" placeholder="e.g. Greece, City Break" />

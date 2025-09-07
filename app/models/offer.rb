@@ -4,6 +4,7 @@
 #
 #  id                :integer          not null, primary key
 #  hotel_id          :integer          not null
+#  travel_agency_id  :integer          not null
 #  name              :string           not null
 #  url               :string
 #  price             :decimal(12, 2)
@@ -20,13 +21,13 @@
 #  index_offers_on_hotel_url_starts  (hotel_id,url,starts_on) UNIQUE
 #  index_offers_on_price             (price)
 #  index_offers_on_starts_on         (starts_on)
+#  index_offers_on_travel_agency_id  (travel_agency_id)
 #
 
 # frozen_string_literal: true
 class Offer < ApplicationRecord
   belongs_to :hotel
-  belongs_to :travel_agency, optional: true
-  belongs_to :country, optional: true
+  belongs_to :travel_agency
 
   validates :name, presence: true
   validates :price, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true

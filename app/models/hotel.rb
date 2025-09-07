@@ -26,6 +26,9 @@
 # frozen_string_literal: true
 class Hotel < ApplicationRecord
   belongs_to :country, optional: true
+
+  has_many :travel_agency_hotels, dependent: :destroy
+  has_many :travel_agenciec, dependent: :nullify, through: :travel_agency_hotels
   has_many :offers, dependent: :destroy
 
   validates :name, presence: true

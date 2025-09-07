@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_09_06_103000) do
+ActiveRecord::Schema[8.0].define(version: 2025_09_07_164656) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -43,6 +43,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_06_103000) do
 
   create_table "offers", force: :cascade do |t|
     t.bigint "hotel_id", null: false
+    t.bigint "travel_agency_id", null: false
     t.string "name", null: false
     t.string "url"
     t.decimal "price", precision: 12, scale: 2
@@ -56,6 +57,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_06_103000) do
     t.index ["hotel_id"], name: "index_offers_on_hotel_id"
     t.index ["price"], name: "index_offers_on_price"
     t.index ["starts_on"], name: "index_offers_on_starts_on"
+    t.index ["travel_agency_id"], name: "index_offers_on_travel_agency_id"
   end
 
   create_table "travel_agencies", force: :cascade do |t|
@@ -67,7 +69,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_06_103000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "travel_agency_hotels", force: :cascade do |t|
+    t.bigint "travel_agency_id", null: false
+    t.bigint "hotel_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["hotel_id"], name: "index_travel_agency_hotels_on_hotel_id"
+    t.index ["travel_agency_id"], name: "index_travel_agency_hotels_on_travel_agency_id"
+  end
+
   add_foreign_key "hotels", "countries"
   add_foreign_key "hotels", "travel_agencies"
   add_foreign_key "offers", "hotels"
+  add_foreign_key "offers", "travel_agencies"
+  add_foreign_key "travel_agency_hotels", "hotels"
+  add_foreign_key "travel_agency_hotels", "travel_agencies"
 end

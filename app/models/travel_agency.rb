@@ -14,6 +14,9 @@
 # frozen_string_literal: true
 
 class TravelAgency < ApplicationRecord
+  has_many :travel_agency_hotels, dependent: :destroy
+  has_many :hotels, dependent: :nullify, through: :travel_agency_hotels
+  has_many :offers, dependent: :destroy
 
   # Validations
   validates :name, presence: true
