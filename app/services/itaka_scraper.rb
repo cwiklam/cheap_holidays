@@ -6,6 +6,7 @@ class ItakaScraper
   DEFAULT_SELECTORS = [
     '[data-testid="offer-list-item-button"]',
     '[data-testid="price"]',
+    '[data-testid="gallery-img"]',
     'h3.styles_title__kH0gG',
     '[class*="offer"]',
     '[class*="card"]',
@@ -47,7 +48,6 @@ class ItakaScraper
     @diagnostics[:filtered_nodes] = filtered.size
     parsed = filtered.map { |n| extract_offer(n) }.compact
     uniq = {}
-    binding.pry
     parsed.each do |o|
       key = [o[:name], o[:url]].join('::')
       uniq[key] ||= o
@@ -65,7 +65,6 @@ class ItakaScraper
 
   def candidate_nodes(doc)
     base = @selectors.flat_map { |sel| doc.css(sel) }
-    # Podnieś węzeł do rodzica zawierającego nagłówek jeśli sam go nie ma
     expanded = base.map do |n|
       if n.at_css('h1,h2,h3,h4,h5,h6')
         n
@@ -115,6 +114,8 @@ class ItakaScraper
 
     image_url = extract_image_url(node, anchor)
     image_url ||= extract_image_by_alt(node, name)
+    puts '@@@@@@@@@@@@@@@@@@'
+    puts image_url
     country = extract_country(node)
 
     {
@@ -233,18 +234,64 @@ class ItakaScraper
   end
 
   def extract_image_url(node, anchor)
+    # Szukaj obrazka w następujących miejscach, w tej kolejności:
+    # 1) w tym samym kontenerze node
+    # 2) w najbliższych przodkach (do 5 poziomów)
+    # 3) globalnie: img powiązany z tym samym anchorem (jeśli jest)
+    # 4) parse srcset jeśli brak src/data-scrollspy
+    scopes = [node]
+    scopes += node.ancestors.take(5)
+
     href = anchor&.[]('href')
+
     candidates = []
-    if href
-      # Szukaj globalnie anchor o tym samym href z img
-      candidates += node.document.css("a[href='#{href}'] img[data-testid='gallery-img']")
+    scopes.each do |scope|
+      candidates += scope.css('img[data-testid="gallery-img"]')
+      # dodatkowy fallback na <picture> -> <img>
+      candidates += scope.css('picture img')
     end
-    candidates += node.css('img[data-testid="gallery-img"]')
-    img = candidates.find { |i| (i['src'] && !i['src'].empty?) || (i['data-scrollspy'] && !i['data-scrollspy'].empty?) }
+
+    if href
+      # Spróbuj znaleźć obraz w karcie, gdzie występuje ten sam href (niekoniecznie jako rodzic img)
+      link_nodes = node.document.css("a[href='#{href}']")
+      link_nodes.each do |ln|
+        container = ln.ancestors.find { |anc| anc.css('img').any? } || ln.parent
+        candidates += container.css('img[data-testid="gallery-img"], picture img') if container
+      end
+    end
+
+    # Odfiltruj duplikaty zachowując kolejność
+    candidates = candidates.uniq
+
+    # Wybierz pierwszy, który ma jakiekolwiek źródło
+    img = candidates.find do |i|
+      (i['src'] && !i['src'].empty?) || (i['data-scrollspy'] && !i['data-scrollspy'].empty?) || (i['srcset'] && !i['srcset'].empty?)
+    end
     return nil unless img
-    src = img['src'].presence || img['data-scrollspy']
+
+    src = img['src']
+    src ||= img['data-scrollspy']
+    src ||= pick_best_from_srcset(img['srcset']) if img['srcset']
+    return nil unless src
+
     return src if src.start_with?('http://', 'https://') || @base_url.nil?
     absolutize_url(src)
+  rescue
+    nil
+  end
+
+  def pick_best_from_srcset(srcset)
+    return nil if srcset.nil? || srcset.strip.empty?
+    # srcset: "url1 100w, url2 576w, url3 1200w"
+    pairs = srcset.split(',').map(&:strip).map do |entry|
+      if entry =~ /(\S+)\s+(\d+)w/
+        [$1, $2.to_i]
+      else
+        [entry, 0]
+      end
+    end
+    best = pairs.max_by { |(_, w)| w }
+    best&.first
   rescue
     nil
   end
@@ -266,7 +313,10 @@ class ItakaScraper
     return nil unless best && best[:score] > 0
     @diagnostics[:image_alt_hits] += 1
     img = best[:img]
-    src = img['src'].presence || img['data-scrollspy']
+    src = img['src']
+    src = nil if src.nil? || src.empty?
+    src ||= img['data-scrollspy']
+    src ||= pick_best_from_srcset(img['srcset'])
     return nil unless src
     return src if src.start_with?('http://', 'https://') || @base_url.nil?
     absolutize_url(src)
