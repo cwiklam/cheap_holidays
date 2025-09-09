@@ -1,8 +1,7 @@
-<div class="w-full text-left max-w-4xl mx-auto space-y-8">
+<div class="w-full text-left max-w-6xl mx-auto space-y-10">
   <div class="flex items-center justify-between flex-wrap gap-4">
-    <h1 class="text-3xl font-bold">Offers for <%= @travel_agency.name %></h1>
+    <h1 class="text-3xl font-bold">Current Offers</h1>
     <div class="flex gap-2">
-      <%= link_to "Back to Agency", @travel_agency, class: "btn btn-sm" %>
       <%= link_to "All Agencies", travel_agencies_path, class: "btn btn-ghost btn-sm" %>
     </div>
   </div>
@@ -21,40 +20,72 @@
     <div class="alert alert-error"><%= @fetch_error %></div>
   <% end %>
 
-  <% if @offers.any? %>
-    <div class="grid md:grid-cols-2 gap-6">
-      <% @offers.each do |offer| %>
-        <div class="card bg-base-200 shadow overflow-hidden">
-          <% if offer[:image_url] %>
-            <figure class="h-40 w-full overflow-hidden bg-base-300">
-              <img src="<%= offer[:image_url] %>" alt="<%= offer[:name] %>" class="object-cover w-full h-full" loading="lazy">
-            </figure>
+  <% collection = @travel_agancies || @travel_agencies || [] %>
+  <% if collection.empty? %>
+    <p class="opacity-70">No travel agencies found.</p>
+  <% end %>
+
+  <% single_scraped_offers = (@offers.present? && collection.size == 1) ? @offers : nil %>
+
+  <% collection.each do |agency| %>
+    <section class="space-y-4 border-t pt-8 first:border-t-0 first:pt-0">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <h2 class="text-2xl font-semibold"><%= agency.name %></h2>
+        <div class="flex gap-2">
+          <%= link_to "Agency page", agency, class: "btn btn-sm" %>
+          <% if agency.url.present? %>
+            <%= link_to "Source", agency.url, target: "_blank", rel: "noopener", class: "btn btn-outline btn-sm" %>
           <% end %>
-          <div class="card-body space-y-2">
-            <h2 class="card-title">
-              <% if offer[:url] %>
-                <%= link_to offer[:name], offer[:url], target: "_blank", rel: "noopener" %>
-              <% else %>
-                <%= offer[:name] %>
-              <% end %>
-              <% if offer[:country].present? %>
-                <span class="badge badge-outline ml-2"><%= offer[:country] %></span>
-              <% end %>
-            </h2>
-            <% if offer[:starts_on].present? %>
-              <p class="opacity-80 text-sm">Term: <%= offer[:starts_on] %></p>
-            <% end %>
-            <% if offer[:price] %>
-              <p class="font-semibold text-lg">
-                <%= number_with_precision(offer[:price], precision: 2) %> <span class="opacity-70 text-sm ml-1">(<%= offer[:price_raw] %>)</span>
-              </p>
-            <% end %>
-          </div>
         </div>
+      </div>
+
+      <% offers_for_agency = if single_scraped_offers
+          single_scraped_offers
+        else
+          rel = agency.offers.order(created_at: :desc)
+          rel = rel.where("offers.name ILIKE ?", "%#{@query}%") if @query.present?
+          rel.limit(100).map { |o| { name: o.name, price: o.price, price_raw: o.price_raw, starts_on: o.starts_on, url: o.url, image_url: (o.hotel&.image_url || o.hotel&.image_thumb_url), country: o.country&.name } }
+        end %>
+
+      <% if offers_for_agency.any? %>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <% offers_for_agency.each do |offer| %>
+            <div class="card bg-base-200 shadow overflow-hidden">
+              <% if offer[:image_url].present? %>
+                <figure class="h-40 w-full overflow-hidden bg-base-300">
+                  <img src="<%= offer[:image_url] %>" alt="<%= offer[:name] %>" class="object-cover w-full h-full" loading="lazy">
+                </figure>
+              <% end %>
+              <div class="card-body space-y-2">
+                <h3 class="card-title text-base">
+                  <% if offer[:url].present? %>
+                    <%= link_to offer[:name], offer[:url], target: "_blank", rel: "noopener" %>
+                  <% else %>
+                    <%= offer[:name] %>
+                  <% end %>
+                  <% if offer[:country].present? %>
+                    <span class="badge badge-outline ml-2"><%= offer[:country] %></span>
+                  <% end %>
+                </h3>
+                <% if offer[:starts_on].present? %>
+                  <p class="opacity-80 text-xs">Term: <%= offer[:starts_on] %></p>
+                <% end %>
+                <% if offer[:price] %>
+                  <p class="font-semibold text-lg">
+                    <%= number_with_precision(offer[:price], precision: 2) %>
+                    <% if offer[:price_raw].present? %>
+                      <span class="opacity-70 text-sm ml-1">(<%= offer[:price_raw] %>)</span>
+                    <% end %>
+                  </p>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="opacity-60 text-sm italic">No offers for this agency (<%= @query.present? ? "filtered by query" : "none fetched" %>).</p>
       <% end %>
-    </div>
-  <% else %>
-    <p class="opacity-70">No offers match your search.</p>
+    </section>
   <% end %>
 
   <% if params[:debug] && @scrape_info.present? %>

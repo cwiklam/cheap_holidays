@@ -38,7 +38,7 @@ class OffersController < ApplicationController
   private
 
   def set_travel_agencies
-    @travel_agencies = TravelAgency.includes().all
+    @travel_agencies = TravelAgency.includes(:offers).all
   end
 
   def fetch_source_html
