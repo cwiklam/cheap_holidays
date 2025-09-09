@@ -9,29 +9,11 @@
   <%= form_with url: offers_path, method: :get, local: true, class: "grid md:grid-cols-5 gap-4 items-end bg-base-200 p-4 rounded" do %>
     <div>
       <label class="label" for="q">Nazwa / Hotel</label>
-      <input type="text" name="q" id="q" value="<%= params[:q] %>" class="input input-bordered w-full" placeholder="np. hotel, resort" />
-    </div>
-    <div>
-      <label class="label" for="country">Kraj</label>
-      <select name="country" id="country" class="select select-bordered w-full">
-        <option value="">(wszystkie)</option>
-        <% @countries.each do |c| %>
-          <option value="<%= c.name %>" <%= 'selected' if c.name == params[:country] %>><%= c.name %></option>
-        <% end %>
-      </select>
-    </div>
-    <div>
-      <label class="label" for="agency_id">Biuro</label>
-      <select name="agency_id" id="agency_id" class="select select-bordered w-full">
-        <option value="">(wszystkie)</option>
-        <% @agencies.each do |a| %>
-          <option value="<%= a.id %>" <%= 'selected' if a.id.to_s == params[:agency_id] %>><%= a.name %></option>
-        <% end %>
-      </select>
+      <input type="text" name="q" id="q" value="<%= params[:q] %>" class="input input-bordered w-full" placeholder="np. hotel, resort"/>
     </div>
     <div>
       <label class="label" for="start">Fragment terminu</label>
-      <input type="text" name="start" id="start" value="<%= params[:start] %>" class="input input-bordered w-full" placeholder="np. 9.09" />
+      <input type="text" name="start" id="start" value="<%= params[:start] %>" class="input input-bordered w-full" placeholder="np. 9.09"/>
     </div>
     <div class="flex gap-2 pt-6 md:pt-0">
       <button class="btn btn-primary" type="submit">Filtruj</button>
@@ -43,55 +25,53 @@
     <div class="overflow-x-auto">
       <table class="table w-full">
         <thead>
-          <tr>
-            <th>Oferta</th>
-            <th>Hotel</th>
-            <th>Kraj</th>
-            <th>Biuro</th>
-            <th>Cena</th>
-            <th>Termin</th>
-            <th>Link</th>
-            <th>Dodano</th>
-          </tr>
+        <tr>
+          <th>Oferta</th>
+          <th>Hotel</th>
+          <th>Kraj</th>
+          <th>Biuro</th>
+          <th>Cena</th>
+          <th>Termin</th>
+          <th>Link</th>
+          <th>Dodano</th>
+        </tr>
         </thead>
         <tbody>
-          <% @offers.each do |offer| %>
-            <tr>
-              <td class="max-w-xs">
-                <div class="font-semibold"><%= offer.name %></div>
-              </td>
-              <td>
-                <% if offer.hotel&.url.present? %>
-                  <%= link_to offer.hotel.name, offer.hotel.url, target: '_blank', rel: 'noopener', class: 'link' %>
-                <% else %>
-                  <%= offer.hotel&.name %>
-                <% end %>
-              </td>
-              <td>
-                <% if offer.country %>
-                  <span class="badge badge-outline"><%= offer.country.name %></span>
-                <% end %>
-              </td>
-              <td>
-                <% if offer.travel_agency %>
-                  <%= link_to offer.travel_agency.name, travel_agency_path(offer.travel_agency), class: 'link' %>
-                <% end %>
-              </td>
-              <td>
-                <% if offer.price %>
-                  <span class="font-medium"><%= number_with_precision(offer.price, precision: 2) %></span>
-                  <div class="text-xs opacity-60"><%= offer.price_raw %></div>
-                <% end %>
-              </td>
-              <td class="text-sm"><%= offer.starts_on %></td>
-              <td>
-                <% if offer.url.present? %>
-                  <%= link_to 'Otwórz', offer.url, target: '_blank', rel: 'noopener', class: 'btn btn-xs' %>
-                <% end %>
-              </td>
-              <td class="text-xs whitespace-nowrap" title="<%= offer.created_at %>"><%= time_ago_in_words(offer.created_at) %> temu</td>
-            </tr>
-          <% end %>
+        <% @offers.each do |offer| %>
+          <tr>
+            <td class="max-w-xs">
+              <div class="font-semibold"><%= offer.name %></div>
+            </td>
+            <td>
+              <%= offer.hotel&.name %>
+            </td>
+            <td>
+              <% if offer.hotel.country %>
+                <span class="badge badge-outline"><%= offer.hotel.country.name %></span>
+              <% end %>
+            </td>
+            <td>
+              <% if offer.travel_agency %>
+                <%= link_to offer.travel_agency.name, travel_agency_path(offer.travel_agency), class: 'link' %>
+              <% end %>
+            </td>
+            <td>
+              <% if offer.price %>
+                <span class="font-medium"><%= number_with_precision(offer.price, precision: 2) %></span>
+                <div class="text-xs opacity-60"><%= offer.price_raw %></div>
+              <% end %>
+            </td>
+            <td class="text-sm"><%= offer.starts_on %></td>
+            <td>
+              <% if offer.url.present? %>
+                <%= link_to 'Otwórz', offer.url, target: '_blank', rel: 'noopener', class: 'btn btn-xs' %>
+              <% end %>
+            </td>
+            <td class="text-xs whitespace-nowrap" title="<%= offer.created_at %>"><%= time_ago_in_words(offer.created_at) %>
+              temu
+            </td>
+          </tr>
+        <% end %>
         </tbody>
       </table>
     </div>

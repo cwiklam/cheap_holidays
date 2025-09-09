@@ -11,9 +11,9 @@ Rails.application.routes.draw do
 
   resources :offers, only: [:index]
   namespace :offers do
-    get 'current'
   end
   resources :travel_agencies do
+    get 'itaka/fetch', to: 'travel_agencies/itaka#fetch', on: :member
   end
 
   # Defines the root path route ("/")

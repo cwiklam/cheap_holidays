@@ -47,6 +47,7 @@ class ItakaScraper
     @diagnostics[:filtered_nodes] = filtered.size
     parsed = filtered.map { |n| extract_offer(n) }.compact
     uniq = {}
+    binding.pry
     parsed.each do |o|
       key = [o[:name], o[:url]].join('::')
       uniq[key] ||= o
