@@ -87,7 +87,6 @@ class ItakaScraper
     name = extract_title(node, text)
     return nil if name.nil? || name.length < 5
 
-    # Wymóg: nazwa musi zawierać jedno ze słów kluczowych
     unless name =~ TITLE_KEYWORDS_REGEX
       @diagnostics[:filtered_missing_keyword] += 1
       return nil
@@ -112,10 +111,9 @@ class ItakaScraper
       return nil
     end
 
+    # images are lazy loaded on itaka
     image_url = extract_image_url(node, anchor)
     image_url ||= extract_image_by_alt(node, name)
-    puts '@@@@@@@@@@@@@@@@@@'
-    puts image_url
     country = extract_country(node)
 
     {
