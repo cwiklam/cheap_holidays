@@ -1,7 +1,5 @@
 # frozen_string_literal: true
-# OfferScraper: heurystyczne wyciąganie ofert z pobranego HTML strony biura podróży.
-# Zwraca tablicę hashy: { title:, price:, currency:, starts_on:, url:, raw_text: }
-# Minimalne założenia – można rozszerzać przekazując dodatkowe selektory.
+
 class ItakaScraper
   DEFAULT_SELECTORS = [
     '[data-testid="offer-list-item-button"]',
@@ -16,8 +14,8 @@ class ItakaScraper
   ].freeze
 
   PRICE_REGEX = /(?<currency>[$€£]|PLN|EUR|USD)?\s*(?<amount>\d{1,3}(?:[\s,]\d{3})*(?:[.,]\d{2})?)/i
-  DATE_REGEX = /(\d{4}-\d{2}-\d{2})|(\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4})/ # prosty heurystyczny wzorzec
-  DATE_RANGE_REGEX = /(\d{1,2}\.\d{1,2})(?:\.?(\d{4}))?\s*[\-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})(?:[^\d]*(?:\(|（)\s*(\d+)\s*dni\s*(?:\)|）))?/i
+  DATE_REGEX = /(\d{4}-\d{2}-\d{2})|(\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4})/
+  DATE_RANGE_REGEX = /(\d{1,2}\.\d{1,2})(?:\.?((\d{4}))?)?\s*[\-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})(?:[^\d]*(?:\(|（)\s*(\d+)\s*dni\s*(?:\)|）))?/i
   TITLE_KEYWORDS = %w[hotel resort spa beach aquapark aqua park lake river club].freeze
   TITLE_KEYWORDS_REGEX = /\b(#{TITLE_KEYWORDS.join('|')})\b/i
 
@@ -76,10 +74,10 @@ class ItakaScraper
     expanded.uniq
   end
 
-  # text_density teraz uproszczony – logika filtracji przeniesiona nad parserem
+  # text_density now simplified – filtering logic moved above the parser
   def text_density(node)
     txt = node.text.strip
-    txt.length.between?(25, 800) # heurystyka
+    txt.length.between?(25, 800) # heuristic
   end
 
   def extract_offer(node)
@@ -128,7 +126,7 @@ class ItakaScraper
   end
 
   def extract_title(node, full_text)
-    # 1. H nagłówki z anchor i słowem kluczowym
+    # 1. Headings (h1–h6) with an anchor and a keyword
     heading_links = node.css('h1 a, h2 a, h3 a, h4 a, h5 a, h6 a')
     preferred = heading_links.find { |a| a.text =~ TITLE_KEYWORDS_REGEX }
     if preferred
@@ -136,39 +134,39 @@ class ItakaScraper
       @diagnostics[:keyword_title_hits] += 1
       return txt
     end
-    # 2. Dowolny nagłówek z keyword
+    # 2. Any heading containing a keyword
     with_kw = node.css('h1, h2, h3, h4, h5, h6').find { |h| h.text =~ TITLE_KEYWORDS_REGEX }
     if with_kw
       txt = with_kw.text.strip
       @diagnostics[:keyword_title_hits] += 1
       return txt
     end
-    # 3. Pierwszy nagłówek jeśli jest (bez keyword)
+    # 3. First heading if present (even without a keyword)
     any_h = node.at_css('h1, h2, h3, h4, h5, h6')
     return any_h.text.strip if any_h&.text&.strip&.length.to_i >= 5
 
     lines = full_text.lines.map { |l| l.strip }.reject(&:empty?)
-    # Odfiltruj linie ewidentnie cenowe / finansowe
+    # Filter out lines that are clearly price/financial
     price_tokens = /(\bzł\b|\/os\.|PLN|EUR|USD|GBP|\d+\s?zł|TFG|TFP)/i
     cleaned = lines.reject { |l| l =~ PRICE_REGEX || l =~ price_tokens }
-    # Priorytet linii ze słowem kluczowym
+    # Prioritize lines containing a keyword
     kw_lines = cleaned.select { |l| l =~ TITLE_KEYWORDS_REGEX }
     unless kw_lines.empty?
       chosen = kw_lines.max_by(&:length)
       @diagnostics[:keyword_title_hits] += 1
       return chosen
     end
-    # Fallback: najdłuższa sensowna z oczyszczonych
+    # Fallback: pick the longest reasonable from the cleaned set
     cleaned.find { |l| l.length >= 5 }
   end
 
   def extract_price_dom(node)
-    # Preferowane: węzeł z data-testid="current-price" i wartość w podrzędnym span (np. span[data-price-catalog-code], albo klasa zawierająca value)
+    # Preferred: a node with data-testid="current-price" and the value in a descendant span (e.g., span[data-price-catalog-code] or a class containing 'value')
     container = node.at_css('[data-testid="current-price"]')
     return nil unless container
     value_node = container.at_css('[data-price-catalog-code]') || container.at_css('span[class*="value"]') || container
     raw_text = value_node.text.strip
-    # Odfiltruj jeśli tekst nie zawiera wzorca ceny z "zł"
+    # Discard if the text does not include a price pattern with 'zł'
     return nil unless raw_text.match?(/\d+\s?\d*\s*zł/i)
     numeric = raw_text.gsub(/[^0-9]/, '')
     return nil if numeric.empty?
@@ -182,7 +180,7 @@ class ItakaScraper
     return nil unless m
     amount_str = m[:amount].gsub(/[\s,]/, '').tr(',', '.')
     amount = amount_str.to_f
-    # Odtwórz surowy format z ewentualnym sufiksem zł, jeśli występuje w oryginale
+    # Reconstruct the raw format with an optional 'zł' suffix if present in the original
     raw_match = text[/\b#{Regexp.escape(m[:amount])}\b[^\n]{0,10}zł/i]
     raw_text = raw_match ? raw_match.strip : m[:amount]
     @diagnostics[:price_strategy_hits][:regex] += 1
@@ -204,7 +202,7 @@ class ItakaScraper
     return nil unless m
     raw = m[0]
     begin
-      # Normalizacja prostych formatów
+      # Normalize simple formats
       cleaned = raw.tr('.', '-').tr('/', '-').split('-').map { |p| p.rjust(2, '0') }.join('-')
       Date.parse(cleaned) rescue nil
     rescue
@@ -215,7 +213,7 @@ class ItakaScraper
   def pick_anchor(node)
     anchors = node.css('a[href]')
     return nil if anchors.empty?
-    # Reużycie logiki scoringu z extract_primary_link
+    # Reuse scoring logic from extract_primary_link
     scored = anchors.map do |a|
       href = a['href'].to_s
       score = 0
@@ -232,11 +230,11 @@ class ItakaScraper
   end
 
   def extract_image_url(node, anchor)
-    # Szukaj obrazka w następujących miejscach, w tej kolejności:
-    # 1) w tym samym kontenerze node
-    # 2) w najbliższych przodkach (do 5 poziomów)
-    # 3) globalnie: img powiązany z tym samym anchorem (jeśli jest)
-    # 4) parse srcset jeśli brak src/data-scrollspy
+    # Look for an image in the following places, in this order:
+    # 1) within the same node container
+    # 2) in the nearest ancestors (up to 5 levels)
+    # 3) globally: an img associated with the same anchor (if present)
+    # 4) parse srcset if src/data-scrollspy are missing
     scopes = [node]
     scopes += node.ancestors.take(5)
 
@@ -245,12 +243,12 @@ class ItakaScraper
     candidates = []
     scopes.each do |scope|
       candidates += scope.css('img[data-testid="gallery-img"]')
-      # dodatkowy fallback na <picture> -> <img>
+      # additional fallback for <picture> -> <img>
       candidates += scope.css('picture img')
     end
 
     if href
-      # Spróbuj znaleźć obraz w karcie, gdzie występuje ten sam href (niekoniecznie jako rodzic img)
+      # Try to find an image in the card where the same href appears (not necessarily as the img's parent)
       link_nodes = node.document.css("a[href='#{href}']")
       link_nodes.each do |ln|
         container = ln.ancestors.find { |anc| anc.css('img').any? } || ln.parent
@@ -258,10 +256,10 @@ class ItakaScraper
       end
     end
 
-    # Odfiltruj duplikaty zachowując kolejność
+    # Filter duplicates while preserving order
     candidates = candidates.uniq
 
-    # Wybierz pierwszy, który ma jakiekolwiek źródło
+    # Pick the first that has any usable source
     img = candidates.find do |i|
       (i['src'] && !i['src'].empty?) || (i['data-scrollspy'] && !i['data-scrollspy'].empty?) || (i['srcset'] && !i['srcset'].empty?)
     end
@@ -331,7 +329,7 @@ class ItakaScraper
     anchors = node.css('a[href]')
     return nil if anchors.empty?
 
-    # 1. Jeśli jest anchor w nagłówku h1-h6 z keyword i parametrem id= lub /wczasy/, bierz go.
+    # 1. If there is an anchor within an h1–h6 heading that contains a keyword and the href includes id= or /wczasy/, take it.
     heading_priority = anchors.select do |a|
       parent_h = a.ancestors.find { |anc| anc.name =~ /h[1-6]/ }
       next false unless parent_h
@@ -344,7 +342,7 @@ class ItakaScraper
       return absolutize_url(heading_priority.first['href'])
     end
 
-    # 2. Anchory z ?id= mają wysoki priorytet.
+    # 2. Anchors with ?id= have high priority.
     scored = anchors.map do |a|
       href = a['href'].to_s
       score = 0
@@ -359,7 +357,7 @@ class ItakaScraper
     best = scored.max_by { |h| h[:score] }
     return absolutize_url(best[:href]) if best && best[:score] > 0
 
-    # 3. Fallback: najdłuższy href.
+    # 3. Fallback: the longest href.
     longest = anchors.max_by { |a| a['href'].to_s.length }
     absolutize_url(longest['href'])
   end
@@ -375,25 +373,25 @@ class ItakaScraper
   def extract_date_range(text)
     m = text.match(DATE_RANGE_REGEX)
     return nil unless m
-    start_raw = m[1]          # np. 9.09 lub 09.09
+    start_raw = m[1]          # e.g., 9.09 or 09.09
     start_year = m[2]
-    end_raw = m[3]            # np. 17.09.2025
+    end_raw = m[3]            # e.g., 17.09.2025
     explicit_days = m[4]
 
-    # Ustal rok końcowy (z end_raw) – wyciągamy
+    # Determine the ending year (from end_raw) – extract it
     end_year = end_raw.split('.').last
     year = start_year || end_year
 
-    # Normalizacja start: jeśli brak roku dodajemy ten z końca
+    # Normalize start: if year missing, append the ending year
     normalized_start = start_raw.include?(year) ? start_raw : "#{start_raw}.#{year}"
 
     begin
       sd = Date.parse(normalized_start.tr('.', '-'))
       ed = Date.parse(end_raw.tr('.', '-'))
-      computed_days = (ed - sd).to_i # różnica dni (zgodnie z przykładem 9.09 ->17.09 daje 8)
+      computed_days = (ed - sd).to_i # day difference (per example 9.09 -> 17.09 yields 8)
       days_part = explicit_days ? "(#{explicit_days} dni)" : "(#{computed_days} dni)"
-      # Format wyjściowy zachowuje kropki i spacje: 9.09 - 17.09.2025 (8 dni)
-      start_display = start_raw.sub(/\.$/, '') # uniknij podwójnej kropki
+      # Output format preserves dots and spaces: 9.09 - 17.09.2025 (8 dni)
+      start_display = start_raw.sub(/\.$/, '') # avoid double dot
       "#{start_display} - #{end_raw} #{days_part}".strip
     rescue
       nil

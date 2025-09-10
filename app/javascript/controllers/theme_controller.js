@@ -1,8 +1,4 @@
 import { Controller } from "@hotwired/stimulus"
-
-// data-controller="theme"
-// data-theme-themes-value="light dark" (opcjonalnie lista motywów DaisyUI)
-// <button data-action="click->theme#toggle">...</button>
 export default class extends Controller {
   static values = { themes: Array }
 
@@ -29,4 +25,3 @@ export default class extends Controller {
     window.localStorage.setItem("theme", theme)
   }
 }
-

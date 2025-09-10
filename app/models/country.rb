@@ -23,7 +23,7 @@ class Country < ApplicationRecord
   validates :name, presence: true
   validates :normalized_name, presence: true, uniqueness: true
 
-  # Normalizuje nazwę (lowercase + pojedyncze spacje)
+  # Normalizes the name (lowercase + single spaces)
   def self.normalize(str)
     str.to_s.downcase.gsub(/\s+/, ' ').strip
   end

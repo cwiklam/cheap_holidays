@@ -12,6 +12,6 @@ class OffersController < ApplicationController
     scope = scope.joins(:country).where("countries.normalized_name = ?", Country.normalize(@country)) if @country.present?
     scope = scope.where(travel_agency_id: @agency_id) if @agency_id.present?
 
-    @offers = scope.limit(200) # prosty limit bezpieczeństwa
+    @offers = scope.limit(200) # simple safety limit
   end
 end

@@ -1,23 +1,23 @@
 <div class="w-full text-left max-w-7xl mx-auto space-y-8">
   <div class="flex items-center justify-between flex-wrap gap-4">
-    <h1 class="text-3xl font-bold">Oferty (ostatnie <%= @offers.size %>)</h1>
+    <h1 class="text-3xl font-bold">Offers (latest <%= @offers.size %>)</h1>
     <div class="flex gap-2">
-      <%= link_to "Powrót", root_path, class: "btn btn-sm" %>
+      <%= link_to "Back", root_path, class: "btn btn-sm" %>
     </div>
   </div>
 
   <%= form_with url: offers_path, method: :get, local: true, class: "grid md:grid-cols-5 gap-4 items-end bg-base-200 p-4 rounded" do %>
     <div>
-      <label class="label" for="q">Nazwa / Hotel</label>
-      <input type="text" name="q" id="q" value="<%= params[:q] %>" class="input input-bordered w-full" placeholder="np. hotel, resort"/>
+      <label class="label" for="q">Name / Hotel</label>
+      <input type="text" name="q" id="q" value="<%= params[:q] %>" class="input input-bordered w-full" placeholder="e.g. hotel, resort"/>
     </div>
     <div>
-      <label class="label" for="start">Fragment terminu</label>
-      <input type="text" name="start" id="start" value="<%= params[:start] %>" class="input input-bordered w-full" placeholder="np. 9.09"/>
+      <label class="label" for="start">Term fragment</label>
+      <input type="text" name="start" id="start" value="<%= params[:start] %>" class="input input-bordered w-full" placeholder="e.g. 9.09"/>
     </div>
     <div class="flex gap-2 pt-6 md:pt-0">
-      <button class="btn btn-primary" type="submit">Filtruj</button>
-      <%= link_to "Wyczyść", offers_path, class: "btn btn-ghost" %>
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <%= link_to "Clear", offers_path, class: "btn btn-ghost" %>
     </div>
   <% end %>
 
@@ -26,14 +26,14 @@
       <table class="table w-full">
         <thead>
         <tr>
-          <th>Oferta</th>
+          <th>Offer</th>
           <th>Hotel</th>
-          <th>Kraj</th>
-          <th>Biuro</th>
-          <th>Cena</th>
-          <th>Termin</th>
+          <th>Country</th>
+          <th>Agency</th>
+          <th>Price</th>
+          <th>Term</th>
           <th>Link</th>
-          <th>Dodano</th>
+          <th>Added</th>
         </tr>
         </thead>
         <tbody>
@@ -64,21 +64,18 @@
             <td class="text-sm"><%= offer.starts_on %></td>
             <td>
               <% if offer.url.present? %>
-                <%= link_to 'Otwórz', offer.url, target: '_blank', rel: 'noopener', class: 'btn btn-xs' %>
+                <%= link_to 'Open', offer.url, target: '_blank', rel: 'noopener', class: 'btn btn-xs' %>
               <% end %>
             </td>
-            <td class="text-xs whitespace-nowrap" title="<%= offer.created_at %>"><%= time_ago_in_words(offer.created_at) %>
-              temu
-            </td>
+            <td class="text-xs whitespace-nowrap" title="<%= offer.created_at %>"><%= time_ago_in_words(offer.created_at) %> ago</td>
           </tr>
         <% end %>
         </tbody>
       </table>
     </div>
   <% else %>
-    <p class="opacity-70">Brak wyników dla podanych filtrów.</p>
+    <p class="opacity-70">No results for the selected filters.</p>
   <% end %>
 
-  <p class="text-xs opacity-60">Wyświetlono maksymalnie 200 najnowszych ofert. Doprecyzuj filtry aby zawęzić listę.</p>
+  <p class="text-xs opacity-60">Showing up to 200 newest offers. Refine filters to narrow the list.</p>
 </div>
-
