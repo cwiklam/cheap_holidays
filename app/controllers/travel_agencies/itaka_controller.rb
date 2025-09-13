@@ -12,8 +12,7 @@ module TravelAgencies
     private
 
     def set_travel_agency
-      identifier     = params[:travel_agency_id] || params[:id]
-      @travel_agency = TravelAgency.find(identifier)
+      @travel_agency = TravelAgency.find_by(name_id: 'itaka')
     end
   end
 end
