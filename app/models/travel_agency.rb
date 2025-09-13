@@ -4,6 +4,7 @@
 #
 #  id            :integer          not null, primary key
 #  name          :string           not null
+#  name_id       :string           not null
 #  description   :text
 #  url           :string           not null
 #  next_page_url :string

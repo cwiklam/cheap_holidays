@@ -2,25 +2,32 @@
 
 module TravelAgencies
   # Fetches Itaka offers page by page by enqueueing itself for the next page.
-  # Stops when: page > max_pages, no offers parsed, or travel agency missing.
+  # Stops when: (1) no offers parsed; (2) fetch error; (3) travel agency missing; (4) optional max_pages exceeded.
   class ItakaSequentialFetchJob < ApplicationJob
     queue_as :default
 
     # @param travel_agency_id [Integer]
     # @param page [Integer]
     # @param query [String, nil]
-    # @param max_pages [Integer]
-    def perform(travel_agency_id, page: 1, query: nil, max_pages: 10)
+    # @param max_pages [Integer, nil] if nil => unlimited until no offers or error
+    def perform(travel_agency_id, page: 1, query: nil, max_pages: nil)
       agency = ::TravelAgency.find_by(id: travel_agency_id)
       return unless agency
       return if page.to_i <= 0
-      return if page.to_i > max_pages.to_i
+
+      unlimited = max_pages.nil?
+      unless unlimited
+        return if page.to_i > max_pages.to_i
+      end
 
       url = build_page_url(agency, page.to_i)
       return if url.blank?
 
       html, error = fetch_html(url)
-      return if error || html.blank?
+      if error || html.blank?
+        Rails.logger.info("ItakaSequentialFetchJob: fetch error on page=#{page} agency=#{agency.id} error=#{error}")
+        return
+      end
 
       scraper = ::ItakaScraper.new(html, base_url: agency.url)
       offers = scraper.offers
@@ -34,9 +41,16 @@ module TravelAgencies
       persist_countries_hotels_offers(agency, offers)
 
       next_page = page.to_i + 1
-      return if next_page > max_pages.to_i
+      unless unlimited
+        return if next_page > max_pages.to_i
+      end
 
-      # Enqueue next page
+      # If we have no pattern for next pages (missing next_page_url) stop after first page
+      if agency.next_page_url.blank?
+        Rails.logger.info("ItakaSequentialFetchJob: next_page_url blank, stopping after page=#{page} agency=#{agency.id}")
+        return
+      end
+
       self.class.perform_later(agency.id, page: next_page, query: query, max_pages: max_pages)
     end
 

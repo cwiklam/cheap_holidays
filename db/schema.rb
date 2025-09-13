@@ -62,6 +62,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_07_164656) do
 
   create_table "travel_agencies", force: :cascade do |t|
     t.string "name", null: false
+    t.string "name_id", null: false
     t.text "description"
     t.string "url", null: false
     t.string "next_page_url"

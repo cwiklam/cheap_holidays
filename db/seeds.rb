@@ -9,5 +9,5 @@
 #   end
 
 TravelAgency.transaction do
-  FactoryBot.create(:travel_agency, name: "ITAKA", url: "https://www.itaka.pl/last-minute/", next_page_url: '?page=')
+  FactoryBot.create(:travel_agency, name: "ITAKA", name_id: 'itaka', url: "https://www.itaka.pl/last-minute/", next_page_url: '?page=')
 end

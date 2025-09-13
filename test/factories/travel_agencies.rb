@@ -4,6 +4,7 @@
 #
 #  id            :integer          not null, primary key
 #  name          :string           not null
+#  name_id       :string           not null
 #  description   :text
 #  url           :string           not null
 #  next_page_url :string
@@ -16,6 +17,7 @@
 FactoryBot.define do
   factory :travel_agency do
     name { "#{Faker::Company.unique.name}" }
+    name_id { name.parameterize }
     url { "https://#{Faker::Internet.unique.domain_word}.example.com" }
     next_page_url { '?page=' }
     description { Faker::Lorem.paragraph(sentence_count: 2) }
