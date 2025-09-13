@@ -53,7 +53,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_07_164656) do
     t.jsonb "raw_data", default: {}
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["hotel_id", "url", "starts_on"], name: "index_offers_on_hotel_url_starts", unique: true
+    t.index ["hotel_id", "url", "starts_on", "price", "source_fetched_at"], name: "index_offers_on_hotel_url_starts"
     t.index ["hotel_id"], name: "index_offers_on_hotel_id"
     t.index ["price"], name: "index_offers_on_price"
     t.index ["starts_on"], name: "index_offers_on_starts_on"

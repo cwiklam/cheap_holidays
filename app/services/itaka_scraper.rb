@@ -15,7 +15,8 @@ class ItakaScraper
 
   PRICE_REGEX = /(?<currency>[$€£]|PLN|EUR|USD)?\s*(?<amount>\d{1,3}(?:[\s,]\d{3})*(?:[.,]\d{2})?)/i
   DATE_REGEX = /(\d{4}-\d{2}-\d{2})|(\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4})/
-  DATE_RANGE_REGEX = /(\d{1,2}\.\d{1,2})(?:\.?((\d{4}))?)?\s*[\-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})(?:[^\d]*(?:\(|（)\s*(\d+)\s*dni\s*(?:\)|）))?/i
+  # e.g. "9.09 - 17.09.2025 (8 dni)" or without explicit days
+  DATE_RANGE_REGEX = /(?<sday>\d{1,2})\.(?<smonth>\d{1,2})(?:\.(?<syear>\d{4}))?\s*[\-–]\s*(?<eday>\d{1,2})\.(?<emonth>\d{1,2})\.(?<eyear>\d{4})(?:[^\d]*(?:\(|（)\s*(?<days>\d+)\s*dni\s*(?:\)|）))?/i
   TITLE_KEYWORDS = %w[hotel resort spa beach aquapark aqua park lake river club].freeze
   TITLE_KEYWORDS_REGEX = /\b(#{TITLE_KEYWORDS.join('|')})\b/i
 
@@ -373,26 +374,25 @@ class ItakaScraper
   def extract_date_range(text)
     m = text.match(DATE_RANGE_REGEX)
     return nil unless m
-    start_raw = m[1]          # e.g., 9.09 or 09.09
-    start_year = m[2]
-    end_raw = m[3]            # e.g., 17.09.2025
-    explicit_days = m[4]
-
-    # Determine the ending year (from end_raw) – extract it
-    end_year = end_raw.split('.').last
-    year = start_year || end_year
-
-    # Normalize start: if year missing, append the ending year
-    normalized_start = start_raw.include?(year) ? start_raw : "#{start_raw}.#{year}"
+    sday = m[:sday]
+    smonth = m[:smonth]
+    syear = m[:syear]
+    eday = m[:eday]
+    emonth = m[:emonth]
+    eyear = m[:eyear]
+    days_explicit = m[:days]
 
     begin
-      sd = Date.parse(normalized_start.tr('.', '-'))
-      ed = Date.parse(end_raw.tr('.', '-'))
-      computed_days = (ed - sd).to_i # day difference (per example 9.09 -> 17.09 yields 8)
-      days_part = explicit_days ? "(#{explicit_days} dni)" : "(#{computed_days} dni)"
-      # Output format preserves dots and spaces: 9.09 - 17.09.2025 (8 dni)
-      start_display = start_raw.sub(/\.$/, '') # avoid double dot
-      "#{start_display} - #{end_raw} #{days_part}".strip
+      year_for_start = (syear || eyear)
+      start_str = [sday, smonth, year_for_start].join('.')
+      end_str = [eday, emonth, eyear].join('.')
+      sd = Date.strptime(start_str, '%d.%m.%Y')
+      ed = Date.strptime(end_str, '%d.%m.%Y')
+      computed_days = (ed - sd).to_i
+      days_part = days_explicit ? "(#{days_explicit} dni)" : "(#{computed_days} dni)"
+      # Original display keeps start without repeating year if absent initially
+      start_display = syear ? start_str : [sday, smonth].join('.')
+      "#{start_display} - #{end_str} #{days_part}".strip
     rescue
       nil
     end

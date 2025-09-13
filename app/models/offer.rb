@@ -18,7 +18,7 @@
 # Indexes
 #
 #  index_offers_on_hotel_id          (hotel_id)
-#  index_offers_on_hotel_url_starts  (hotel_id,url,starts_on) UNIQUE
+#  index_offers_on_hotel_url_starts  (hotel_id,url,starts_on,price,source_fetched_at)
 #  index_offers_on_price             (price)
 #  index_offers_on_starts_on         (starts_on)
 #  index_offers_on_travel_agency_id  (travel_agency_id)

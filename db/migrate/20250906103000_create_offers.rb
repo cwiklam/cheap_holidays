@@ -14,7 +14,7 @@ class CreateOffers < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :offers, [:hotel_id, :url, :starts_on], unique: true, name: "index_offers_on_hotel_url_starts"
+    add_index :offers, [:hotel_id, :url, :starts_on, :price, :source_fetched_at], name: "index_offers_on_hotel_url_starts"
     add_index :offers, :starts_on
     add_index :offers, :price
   end
