@@ -17,6 +17,11 @@
   </div>
 
   <div>
+    <%= f.label :name_id, 'Name id', class: "label" %>
+    <%= f.text_field :name_id, class: "input input-bordered w-full", autofocus: true %>
+  </div>
+
+  <div>
     <%= f.label :url, class: "label" %>
     <%= f.url_field :url, class: "input input-bordered w-full", placeholder: "https://example.com" %>
   </div>

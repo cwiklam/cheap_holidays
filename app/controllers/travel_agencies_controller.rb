@@ -46,6 +46,6 @@ class TravelAgenciesController < ApplicationController
   end
 
   def travel_agency_params
-    params.require(:travel_agency).permit(:name, :description, :url)
+    params.require(:travel_agency).permit(:name, :name_id, :description, :url)
   end
 end
