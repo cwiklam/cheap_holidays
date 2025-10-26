@@ -13,7 +13,8 @@ Rails.application.routes.draw do
   namespace :offers do
   end
   resources :travel_agencies do
-    get 'itaka/fetch', to: 'travel_agencies/itaka#fetch', on: :member
+    # Unified fetch endpoint for any travel agency
+    get :fetch, on: :member
   end
 
   # Defines the root path route ("/")

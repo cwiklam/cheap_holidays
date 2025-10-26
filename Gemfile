@@ -6,7 +6,7 @@ gem "rails", "~> 8.0.2", ">= 8.0.2.1"
 gem "propshaft"
 # Tailwind CSS integration without Node build pipeline [https://github.com/rails/tailwindcss-rails]
 gem "tailwindcss-ruby"
-gem "tailwindcss-rails"
+gem "tailwindcss-rails", "~> 3.3.1"
 # Use postgresql as the database for Active Record
 gem "pg", "~> 1.1"
 # Use the Puma web server [https://github.com/puma/puma]

@@ -30,7 +30,7 @@ module TravelAgencies
         return
       end
 
-      scraper = ::TravelAgencies::TuiScraper.new(base_url: agency.url)
+      scraper = ::TuiScraper.new(base_url: agency.url)
       offers = scraper.call(html: html)
       offers.select! { |o| o[:name].to_s.downcase.include?(query.to_s.downcase) } if query.present?
 
