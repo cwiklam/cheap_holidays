@@ -4,6 +4,7 @@ require 'nokogiri'
 require 'net/http'
 require 'uri'
 require 'bigdecimal'
+require 'ferrum'
 
 class TuiScraper
   OFFER_CONTAINER_SELECTOR = 'div.offer-tile-wrapper.offer-tile-wrapper--listingOffer'
@@ -11,10 +12,11 @@ class TuiScraper
   PRICE_SELECTOR           = 'span.price-value__amount, [data-testid="price-amount"]'
   DATE_RANGE_REGEX         = /\b\d{2}\.\d{2}\.\d{4}\s*[-–]\s*\d{2}\.\d{2}\.\d{4}\b/
 
-  def initialize(base_url:, http_timeout: 15, user_agent: default_user_agent)
+  def initialize(base_url:, http_timeout: 15, user_agent: default_user_agent, use_browser: true)
     @base_url     = base_url
     @http_timeout = http_timeout
     @user_agent   = user_agent
+    @use_browser  = use_browser
   end
 
   # Returns array of hashes: [{ name:, url:, price:, starts_on:, raw_data: }, ...]
@@ -30,20 +32,100 @@ class TuiScraper
   end
 
   def fetch_document(url)
-    uri               = URI.parse(url)
-    req               = Net::HTTP::Get.new(uri)
+    if @use_browser
+      doc = fetch_with_browser(url)
+      return doc if doc
+    end
+    fetch_with_http(url)
+  end
+
+  # Headless browser path: follows JS redirects and waits for the final, populated page
+  def fetch_with_browser(url)
+    browser_flags = { 'headless': true }
+    if ENV['FERRUM_NO_SANDBOX'] == '1'
+      browser_flags[:'no-sandbox'] = nil
+      browser_flags[:'disable-gpu'] = nil
+    end
+
+    browser_kwargs = { timeout: @http_timeout, browser_options: browser_flags }
+    if ENV['FERRUM_BROWSER_PATH'].present?
+      browser_kwargs[:path] = ENV['FERRUM_BROWSER_PATH']
+    end
+
+    browser = Ferrum::Browser.new(**browser_kwargs)
+    begin
+      browser.headers.set({ 'User-Agent' => @user_agent }) rescue nil
+      browser.goto(url)
+
+      # Wait until network is idle and URL stabilizes (handles redirects)
+      stable_url_since = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      last_url         = nil
+      deadline         = stable_url_since + @http_timeout
+
+      loop do
+        begin
+          browser.network.wait_for_idle(timeout: 2)
+        rescue StandardError
+          # ignore short spikes
+        end
+
+        current = browser.current_url
+        if current != last_url
+          last_url = current
+          stable_url_since = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        end
+
+        # Also wait for the main container to appear and stabilize in count
+        before_count = browser.css(OFFER_CONTAINER_SELECTOR)&.count || 0
+        sleep 0.3
+        after_count  = browser.css(OFFER_CONTAINER_SELECTOR)&.count || 0
+
+        url_stable   = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - stable_url_since) >= 0.8
+        count_stable = (before_count > 0) && (before_count == after_count)
+
+        break if (url_stable && count_stable) || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+      end
+
+      return Nokogiri::HTML(browser.body)
+    rescue StandardError
+      nil
+    ensure
+      browser&.quit
+    end
+  end
+
+  # Pure HTTP path: follows 3xx redirects to the final URL, then returns parsed HTML
+  def fetch_with_http(url, limit: 5)
+    raise 'too many redirects' if limit <= 0
+
+    uri = URI.parse(url)
+    req = Net::HTTP::Get.new(uri)
     req['User-Agent'] = @user_agent
 
     Net::HTTP.start(
       uri.host,
       uri.port,
-      use_ssl:      uri.scheme == 'https',
+      use_ssl: uri.scheme == 'https',
       read_timeout: @http_timeout,
       open_timeout: @http_timeout
     ) do |http|
       res = http.request(req)
-      raise "HTTP error: #{res.code}" unless res.is_a?(Net::HTTPSuccess)
-      Nokogiri::HTML(res.body)
+
+      case res
+      when Net::HTTPSuccess
+        return Nokogiri::HTML(res.body)
+      when Net::HTTPRedirection
+        location = res['location']
+        raise 'redirect without location header' if location.to_s.empty?
+        next_url = begin
+          URI.join(url, location).to_s
+        rescue
+          location
+        end
+        return fetch_with_http(next_url, limit: limit - 1)
+      else
+        raise "HTTP error: #{res.code}"
+      end
     end
   end
 
@@ -102,7 +184,7 @@ class TuiScraper
 
   def to_decimal(str)
     return nil if str.to_s.strip.empty?
-    s = str.gsub(/[^\d,.\-]/, '')
+    s = str.gsub(/[^\d,\.\-]/, '')
     if s.count(',') == 1 && s.count('.') == 0
       s = s.tr(',', '.')
     else
@@ -120,4 +202,3 @@ class TuiScraper
     href
   end
 end
-

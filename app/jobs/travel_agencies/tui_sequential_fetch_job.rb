@@ -24,14 +24,23 @@ module TravelAgencies
       url = build_page_url(agency, page.to_i)
       return if url.blank?
 
-      html, error = fetch_html(url)
-      if error || html.blank?
-        Rails.logger.info("TuiSequentialFetchJob: fetch error on page=#{page} agency=#{agency.id} error=#{error}")
-        return
+      # Prefer headless browser via TuiScraper to allow JS-rendered content and to wait for final page
+      offers = []
+      begin
+        scraper = ::TuiScraper.new(base_url: url, http_timeout: 20, use_browser: true)
+        offers  = scraper.call
+      rescue => e
+        Rails.logger.info("TuiSequentialFetchJob: scraper error on page=#{page} agency=#{agency.id} error=#{e.message}")
+        # Fallback: try raw HTTP if browser path failed
+        html, error = fetch_html(url)
+        if error || html.blank?
+          Rails.logger.info("TuiSequentialFetchJob: fetch error on page=#{page} agency=#{agency.id} error=#{error}")
+          return
+        end
+        # Use agency.url as base for absolutizing if fallback path
+        offers = ::TuiScraper.new(base_url: agency.url, use_browser: false).call(html: html)
       end
 
-      scraper = ::TuiScraper.new(base_url: agency.url)
-      offers = scraper.call(html: html)
       offers.select! { |o| o[:name].to_s.downcase.include?(query.to_s.downcase) } if query.present?
 
       if offers.blank?

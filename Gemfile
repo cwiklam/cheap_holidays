@@ -24,6 +24,8 @@ gem "jbuilder"
 gem "nokogiri"
 # HTTP client with middleware architecture
 gem "faraday"
+# high-level API to control chrome
+gem "ferrum"
 # Fast JSON parser/serializer
 gem "oj"
 
