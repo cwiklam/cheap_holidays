@@ -4,7 +4,14 @@ require 'nokogiri'
 require 'net/http'
 require 'uri'
 require 'bigdecimal'
-require 'ferrum'
+
+# Optional: headless browser for JS-rendered pages
+begin
+  require 'ferrum'
+  FERRUM_AVAILABLE = true
+rescue LoadError
+  FERRUM_AVAILABLE = false
+end
 
 class TuiScraper
   OFFER_CONTAINER_SELECTOR = 'div.offer-tile-wrapper.offer-tile-wrapper--listingOffer'
@@ -19,10 +26,18 @@ class TuiScraper
     @use_browser  = use_browser
   end
 
-  # Returns array of hashes: [{ name:, url:, price:, starts_on:, raw_data: }, ...]
+  # Returns array of hashes: [{ name:, url:, price:, starts_on:, raw_data:, countries: [..], country: .. }, ...]
   def call(html: nil)
     doc = html ? Nokogiri::HTML(html) : fetch_document(@base_url)
-    parse_offers(doc)
+    offers = parse_offers(doc)
+    countries = extract_countries(doc)
+    if countries.any?
+      offers.each do |o|
+        o[:countries] = countries
+        o[:country] ||= countries.first
+      end
+    end
+    offers
   end
 
   private
@@ -32,9 +47,11 @@ class TuiScraper
   end
 
   def fetch_document(url)
-    if @use_browser
+    if @use_browser && FERRUM_AVAILABLE
       doc = fetch_with_browser(url)
       return doc if doc
+    elsif @use_browser && !FERRUM_AVAILABLE
+      Rails.logger.info('[TuiScraper] Ferrum not available, falling back to HTTP fetch') if defined?(Rails)
     end
     fetch_with_http(url)
   end
@@ -151,6 +168,15 @@ class TuiScraper
       starts_on: date_str,
       raw_data:  collect_raw(node)
     }
+  end
+
+  def extract_countries(doc)
+    return [] unless doc
+    nodes = doc.css('ol.breadcrumbs__list li a span')
+    names = nodes.map { |n| squish(n.text) }.reject(&:empty?)
+    names.uniq
+  rescue
+    []
   end
 
   def collect_raw(node)

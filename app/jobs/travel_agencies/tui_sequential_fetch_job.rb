@@ -14,33 +14,144 @@ module TravelAgencies
     def perform(travel_agency_id, page: 1, query: nil, max_pages: nil)
       agency = ::TravelAgency.find_by(id: travel_agency_id)
       return unless agency
-      return if page.to_i <= 0
+
+      # Prefer browser-driven flow if Ferrum is available; fallback to legacy HTTP pagination
+      if ferrum_available?
+        perform_with_browser(agency, query: query, max_pages: max_pages)
+        return
+      end
+
+      legacy_perform_http(agency, page: page, query: query, max_pages: max_pages)
+    end
+
+    private
+
+    def ferrum_available?
+      require 'ferrum'
+      true
+    rescue LoadError
+      false
+    end
+
+    def new_browser(timeout: 25)
+      require 'ferrum'
+      flags = { 'headless': true }
+      if ENV['FERRUM_NO_SANDBOX'] == '1'
+        flags[:'no-sandbox'] = nil
+        flags[:'disable-gpu'] = nil
+      end
+      kwargs = { timeout: timeout, browser_options: flags }
+      kwargs[:path] = ENV['FERRUM_BROWSER_PATH'] if ENV['FERRUM_BROWSER_PATH'].present?
+      Ferrum::Browser.new(**kwargs)
+    end
+
+    def perform_with_browser(agency, query:, max_pages:)
+      browser = new_browser(timeout: 25)
+      begin
+        browser.goto(agency.url)
+        wait_for_idle_and_offers(browser, timeout: 20)
+
+        day_index = -1
+        loop do
+          day_index += 1
+          break unless click_day_tile(browser, day_index)
+          wait_for_idle_and_offers(browser, timeout: 20)
+
+          # First batch for the selected day
+          persist_batch(browser, agency, query)
+
+          # Click "Pokaż więcej" repeatedly until no more offers for the day
+          clicks = 0
+          while click_load_more(browser)
+            clicks += 1
+            wait_for_idle_and_offers(browser, timeout: 20)
+            persist_batch(browser, agency, query)
+            break if max_pages && clicks >= max_pages
+          end
+        end
+      ensure
+        browser&.quit
+      end
+    end
+
+    def click_day_tile(browser, index)
+      tiles = browser.css('div.upcoming-offers-tile')
+      return false if tiles.nil? || tiles.empty?
+      node = tiles[index]
+      return false unless node
+      begin
+        node.scroll_into_view
+      rescue StandardError
+      end
+      node.click
+      true
+    rescue StandardError
+      false
+    end
+
+    def click_load_more(browser)
+      # Find span with text "Pokaż więcej" and click its closest button ancestor if present
+      nodes = browser.css('span.button__content')
+      return false if nodes.nil? || nodes.empty?
+      target = nodes.find { |n| n.text.to_s.strip.downcase.include?('pokaż więcej') }
+      return false unless target
+      button = target.at_xpath('ancestor::button[1]') rescue nil
+      (button || target).click
+      true
+    rescue StandardError
+      false
+    end
+
+    def wait_for_idle_and_offers(browser, timeout: 20)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      last_url = nil
+      loop do
+        begin
+          browser.network.wait_for_idle(timeout: 2)
+        rescue StandardError
+        end
+        current = browser.current_url
+        last_url = current if last_url.nil?
+        before = browser.css(::TuiScraper::OFFER_CONTAINER_SELECTOR)&.count || 0
+        sleep 0.3
+        after  = browser.css(::TuiScraper::OFFER_CONTAINER_SELECTOR)&.count || 0
+        url_stable = (current == last_url)
+        offers_ready = (after > 0) && (before == after)
+        break if url_stable && offers_ready
+        last_url = current
+        break if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+      end
+    end
+
+    def persist_batch(browser, agency, query)
+      html = browser.body
+      base = browser.current_url
+      offers = ::TuiScraper.new(base_url: base, use_browser: false).call(html: html)
+      offers.select! { |o| o[:name].to_s.downcase.include?(query.to_s.downcase) } if query.present?
+      return if offers.blank?
+      persist_countries_hotels_offers(agency, offers)
+    end
+
+    # Legacy HTTP flow retained as fallback
+    def legacy_perform_http(agency, page:, query:, max_pages:)
+      page = page.to_i
+      return if page <= 0
 
       unlimited = max_pages.nil?
       unless unlimited
-        return if page.to_i > max_pages.to_i
+        return if page > max_pages.to_i
       end
 
-      url = build_page_url(agency, page.to_i)
+      url = build_page_url(agency, page)
       return if url.blank?
 
-      # Prefer headless browser via TuiScraper to allow JS-rendered content and to wait for final page
-      offers = []
-      begin
-        scraper = ::TuiScraper.new(base_url: url, http_timeout: 20, use_browser: true)
-        offers  = scraper.call
-      rescue => e
-        Rails.logger.info("TuiSequentialFetchJob: scraper error on page=#{page} agency=#{agency.id} error=#{e.message}")
-        # Fallback: try raw HTTP if browser path failed
-        html, error = fetch_html(url)
-        if error || html.blank?
-          Rails.logger.info("TuiSequentialFetchJob: fetch error on page=#{page} agency=#{agency.id} error=#{error}")
-          return
-        end
-        # Use agency.url as base for absolutizing if fallback path
-        offers = ::TuiScraper.new(base_url: agency.url, use_browser: false).call(html: html)
+      html, error = fetch_html(url)
+      if error || html.blank?
+        Rails.logger.info("TuiSequentialFetchJob: fetch error on page=#{page} agency=#{agency.id} error=#{error}")
+        return
       end
 
+      offers = ::TuiScraper.new(base_url: agency.url, use_browser: false).call(html: html)
       offers.select! { |o| o[:name].to_s.downcase.include?(query.to_s.downcase) } if query.present?
 
       if offers.blank?
@@ -62,8 +173,6 @@ module TravelAgencies
 
       self.class.perform_later(agency.id, page: next_page, query: query, max_pages: max_pages)
     end
-
-    private
 
     def build_page_url(agency, page)
       return agency.url if page == 1
@@ -107,17 +216,31 @@ module TravelAgencies
     def persist_countries_hotels_offers(agency, offers)
       countries_map = {}
       offers.each do |offer|
-        country = nil
-        if offer[:country].present?
-          country_name = offer[:country].strip
-          unless country_name.empty?
-            normalized = ::Country.normalize(country_name)
-            country = countries_map[normalized] ||= ::Country.where(normalized_name: normalized).first_or_create(name: country_name)
-          end
+        # Collect countries from offer (array preferred), fallback to single :country
+        countries_list = Array(offer[:countries]).map { |c| c.to_s.strip }.reject(&:empty?)
+        countries_list = [offer[:country].to_s.strip].reject(&:empty?) if countries_list.empty? && offer[:country].present?
+        countries_list.uniq!
+
+        # Ensure all countries exist in DB and cache them
+        resolved_countries = []
+        countries_list.each do |cname|
+          normalized = ::Country.normalize(cname)
+          country_rec = countries_map[normalized] ||= ::Country.where(normalized_name: normalized).first_or_create(name: cname)
+          resolved_countries << country_rec
         end
+        main_country = resolved_countries.first
 
         hotel = find_or_initialize_hotel(offer)
-        save_hotel(hotel, offer, country, agency)
+        # Attach main country and persist
+        save_hotel(hotel, offer, main_country, agency)
+        # Also keep all countries on hotel.raw_data for reference
+        begin
+          rd = (hotel.raw_data || {}).dup
+          rd[:countries] = countries_list if countries_list.any?
+          hotel.update_column(:raw_data, rd)
+        rescue StandardError
+        end
+
         persist_offer_snapshot(hotel, offer, agency)
       end
     end
