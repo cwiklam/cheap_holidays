@@ -20,4 +20,4 @@ development:
     schedule: at 7:05am every day
   itaka_offers_afternoon:
     class: TravelAgencies::ItakaDailySchedulerJob
-    schedule: at 13:35pm every day
+    schedule: at 7:50pm every day
