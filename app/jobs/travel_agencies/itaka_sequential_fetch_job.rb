@@ -10,8 +10,8 @@ module TravelAgencies
     # @param page [Integer]
     # @param query [String, nil]
     # @param max_pages [Integer, nil] if nil => unlimited until no offers or error
-    def perform(travel_agency_id, page: 1, query: nil, max_pages: nil)
-      agency = ::TravelAgency.find_by(id: travel_agency_id)
+    def perform(page: 1, query: nil, max_pages: 100)
+      agency = ::TravelAgency.find_by(name_id: 'itaka')
       return unless agency
       return if page.to_i <= 0
 
@@ -30,7 +30,7 @@ module TravelAgencies
       end
 
       scraper = ::ItakaScraper.new(html, base_url: agency.url)
-      offers = scraper.offers
+      offers  = scraper.offers
       offers.select! { |o| o[:name].to_s.downcase.include?(query.to_s.downcase) } if query.present?
 
       if offers.blank?
@@ -51,7 +51,7 @@ module TravelAgencies
         return
       end
 
-      self.class.perform_later(agency.id, page: next_page, query: query, max_pages: max_pages)
+      self.class.perform_later(page: next_page, query: query, max_pages: max_pages)
     end
 
     private
@@ -76,7 +76,7 @@ module TravelAgencies
     end
 
     def fetch_html(url)
-      conn = Faraday.new do |f|
+      conn     = Faraday.new do |f|
         f.options.timeout      = 12
         f.options.open_timeout = 7
         f.adapter Faraday.default_adapter
@@ -100,10 +100,10 @@ module TravelAgencies
         country = nil
         if offer[:country].present?
           country_name = offer[:country].strip
-            unless country_name.empty?
-              normalized = ::Country.normalize(country_name)
-              country = countries_map[normalized] ||= ::Country.where(normalized_name: normalized).first_or_create(name: country_name)
-            end
+          unless country_name.empty?
+            normalized = ::Country.normalize(country_name)
+            country    = countries_map[normalized] ||= ::Country.where(normalized_name: normalized).first_or_create(name: country_name)
+          end
         end
         hotel = find_or_initialize_hotel(offer)
         save_hotel(hotel, offer, country, agency)
@@ -120,13 +120,13 @@ module TravelAgencies
     end
 
     def save_hotel(hotel, offer, country, agency)
-      hotel.name = offer[:name]
-      hotel.url = offer[:url] if offer[:url].present?
-      hotel.country = country if country
-      hotel.image_url = offer[:image_url] if offer[:image_url].present?
+      hotel.name              = offer[:name]
+      hotel.url               = offer[:url] if offer[:url].present?
+      hotel.country           = country if country
+      hotel.image_url         = offer[:image_url] if offer[:image_url].present?
       hotel.source_fetched_at = Time.current
-      hotel.raw_data = offer
-      hotel.travel_agency ||= agency if hotel.respond_to?(:travel_agency) && hotel.travel_agency.nil?
+      hotel.raw_data          = offer
+      hotel.travel_agency     ||= agency if hotel.respond_to?(:travel_agency) && hotel.travel_agency.nil?
       hotel.save(validate: true)
     rescue ActiveRecord::RecordInvalid
       # ignore invalid hotel
@@ -142,15 +142,15 @@ module TravelAgencies
         return
       end
 
-      record = hotel.offers.build
-      record.name = offer[:name]
-      record.url = offer[:url]
-      record.price = offer[:price]
-      record.price_raw = offer[:price_raw]
-      record.starts_on = offer[:starts_on]
+      record                   = hotel.offers.build
+      record.name              = offer[:name]
+      record.url               = offer[:url]
+      record.price             = offer[:price]
+      record.price_raw         = offer[:price_raw]
+      record.starts_on         = offer[:starts_on]
       record.source_fetched_at = Time.current
-      record.raw_data = offer
-      record.travel_agency = agency
+      record.raw_data          = offer
+      record.travel_agency     = agency
       record.save(validate: true)
     rescue ActiveRecord::RecordInvalid
       # ignore offer errors

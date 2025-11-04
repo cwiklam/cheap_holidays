@@ -11,8 +11,8 @@ module TravelAgencies
     # @param page [Integer]
     # @param query [String, nil]
     # @param max_pages [Integer, nil] if nil => unlimited until no offers or error
-    def perform(travel_agency_id, page: 1, query: nil, max_pages: nil)
-      agency = ::TravelAgency.find_by(id: travel_agency_id)
+    def perform(page: 1, query: nil, max_pages: 100)
+      agency = ::TravelAgency.find_by(name_id: 'tui')
       return unless agency
 
       # Prefer browser-driven flow if Ferrum is available; fallback to legacy HTTP pagination
@@ -171,7 +171,7 @@ module TravelAgencies
         return
       end
 
-      self.class.perform_later(agency.id, page: next_page, query: query, max_pages: max_pages)
+      self.class.perform_later(page: next_page, query: query, max_pages: max_pages)
     end
 
     def build_page_url(agency, page)
