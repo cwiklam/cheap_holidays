@@ -49,12 +49,15 @@ module TravelAgencies
       browser = new_browser(timeout: 25)
       begin
         browser.goto(agency.url)
+        handle_cookiebot(browser)
         wait_for_idle_and_offers(browser, timeout: 20)
+        # HERE IS OK
 
         day_index = -1
         loop do
           day_index += 1
           break unless click_day_tile(browser, day_index)
+          handle_cookiebot(browser)
           wait_for_idle_and_offers(browser, timeout: 20)
 
           # First batch for the selected day
@@ -64,6 +67,7 @@ module TravelAgencies
           clicks = 0
           while click_load_more(browser)
             clicks += 1
+            handle_cookiebot(browser)
             wait_for_idle_and_offers(browser, timeout: 20)
             persist_batch(browser, agency, query)
             break if max_pages && clicks >= max_pages
@@ -72,6 +76,59 @@ module TravelAgencies
       ensure
         browser&.quit
       end
+    end
+
+    # Attempts to decline/close Cookiebot dialog if it exists.
+    # Looks for the main wrapper `div.CybotCookiebotDialogContentWrapper` and then
+    # common decline/"only necessary" buttons inside.
+    def handle_cookiebot(browser)
+      wrappers = browser.css('div.CybotCookiebotDialogContentWrapper')
+      return if wrappers.nil? || wrappers.empty?
+
+      wrapper = wrappers.first
+
+      # First, try dedicated decline/reject buttons
+      candidates = []
+      begin
+        candidates.concat(wrapper.css('button'))
+      rescue StandardError
+      end
+
+      button = candidates.find do |node|
+        text = node.text.to_s.strip.downcase
+        text.include?('reject') ||
+          text.include?('decline') ||
+          text.include?('tylko niezbędne') ||
+          text.include?('tylko konieczne') ||
+          text.include?('use necessary') ||
+          text.include?('necessary only')
+      end
+
+      # Fallback: try a generic close button ("X")
+      if button.nil?
+        button = candidates.find do |node|
+          txt = node.text.to_s.strip
+          txt == '×' || txt == 'x'
+        end
+      end
+
+      # As a last resort, click the first button we see inside the dialog
+      button ||= candidates.first
+
+      return unless button
+
+      begin
+        button.scroll_into_view
+      rescue StandardError
+      end
+
+      begin
+        button.click
+      rescue StandardError
+      end
+    rescue StandardError
+      # Swallow any Cookiebot-specific errors, we don't want to break the job
+      nil
     end
 
     def click_day_tile(browser, index)

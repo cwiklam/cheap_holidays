@@ -45,9 +45,9 @@ class TravelAgenciesController < ApplicationController
 
     case @travel_agency.name_id
     when 'itaka'
-      TravelAgencies::ItakaSequentialFetchJob.perform_later(@travel_agency.id, page: 1, query: query, max_pages: max_pages)
+      TravelAgencies::ItakaSequentialFetchJob.perform_later(page: 1, query: query, max_pages: max_pages)
     when 'tui'
-      TravelAgencies::TuiSequentialFetchJob.perform_later(@travel_agency.id, page: 1, query: query, max_pages: max_pages)
+      TravelAgencies::TuiSequentialFetchJob.perform_later(page: 1, query: query, max_pages: max_pages)
     else
       redirect_to @travel_agency, alert: "Fetch not implemented for agency: #{@travel_agency.name_id}" and return
     end
