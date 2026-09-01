@@ -1,6 +1,6 @@
 <div class="w-full text-left max-w-7xl mx-auto space-y-8">
   <div class="flex items-center justify-between flex-wrap gap-4">
-    <h1 class="text-3xl font-bold">Offers (latest <%= @offers.size %>)</h1>
+    <h1 class="text-3xl font-bold">Offers (<%= @offers.total_count %>)</h1>
     <div class="flex gap-2">
       <%= link_to "Back", root_path, class: "btn btn-sm" %>
     </div>
@@ -73,9 +73,13 @@
         </tbody>
       </table>
     </div>
+
+    <div class="text-sm opacity-70">
+      Showing <%= @offers.offset_value + 1 %>-<%= @offers.offset_value + @offers.length %> of <%= @offers.total_count %>
+    </div>
+
+    <%= render PaginationComponent.new(paginator: @offers, per_page_options: [50, 100], current_per_page: @per_page) %>
   <% else %>
     <p class="opacity-70">No results for the selected filters.</p>
   <% end %>
-
-  <p class="text-xs opacity-60">Showing up to 200 newest offers. Refine filters to narrow the list.</p>
 </div>

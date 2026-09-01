@@ -1,0 +1,39 @@
+<% if paginator.present? && paginator.total_pages > 1 %>
+  <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <nav class="join" aria-label="Pagination">
+      <% if paginator.prev_page %>
+        <%= link_to "Prev", url_for(request.query_parameters.to_h.merge("page" => paginator.prev_page, "per_page" => current_per_page)), class: "join-item btn btn-sm" %>
+      <% else %>
+        <span class="join-item btn btn-sm btn-disabled">Prev</span>
+      <% end %>
+
+      <% (1..paginator.total_pages).each do |page| %>
+        <% query = request.query_parameters.to_h.merge("page" => page, "per_page" => current_per_page) %>
+
+        <% if page == paginator.current_page %>
+          <span class="join-item btn btn-sm btn-primary"><%= page %></span>
+        <% else %>
+          <%= link_to page, url_for(query), class: "join-item btn btn-sm" %>
+        <% end %>
+      <% end %>
+
+      <% if paginator.next_page %>
+        <%= link_to "Next", url_for(request.query_parameters.to_h.merge("page" => paginator.next_page, "per_page" => current_per_page)), class: "join-item btn btn-sm" %>
+      <% else %>
+        <span class="join-item btn btn-sm btn-disabled">Next</span>
+      <% end %>
+    </nav>
+
+    <%= form_with url: request.path, method: :get, local: true, class: "flex items-center gap-2" do %>
+      <% request.query_parameters.except("page", "per_page").each do |key, value| %>
+        <% if value.present? %>
+          <%= hidden_field_tag key, value %>
+        <% end %>
+      <% end %>
+
+      <%= hidden_field_tag :page, 1 %>
+      <label class="label text-xs uppercase tracking-wide" for="per_page">Per page</label>
+      <%= select_tag :per_page, options_for_select(per_page_options.map { |amount| [amount, amount] }, current_per_page), class: "select select-bordered select-sm", onchange: "this.form.submit()" %>
+    <% end %>
+  </div>
+<% end %>

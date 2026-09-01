@@ -1,0 +1,406 @@
+# frozen_string_literal: true
+
+module Itaka
+  class Scraper
+    DEFAULT_SELECTORS = [
+      '[data-testid="offer-list-item-button"]',
+      '[data-testid="price"]',
+      '[data-testid="gallery-img"]',
+      'h3.styles_title__kH0gG',
+      '[class*="offer"]',
+      '[class*="card"]',
+      '[class*="product"]',
+      'article',
+      'li'
+    ].freeze
+
+    PRICE_REGEX = /(?<currency>[$€£]|PLN|EUR|USD)?\s*(?<amount>\d{1,3}(?:[\s,]\d{3})*(?:[.,]\d{2})?)/i
+    DATE_REGEX  = /(\d{4}-\d{2}-\d{2})|(\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4})/
+    # e.g. "9.09 - 17.09.2025 (8 dni)" or without explicit days
+    DATE_RANGE_REGEX     = /(?<sday>\d{1,2})\.(?<smonth>\d{1,2})(?:\.(?<syear>\d{4}))?\s*[\-–]\s*(?<eday>\d{1,2})\.(?<emonth>\d{1,2})\.(?<eyear>\d{4})(?:[^\d]*(?:\(|（)\s*(?<days>\d+)\s*dni\s*(?:\)|）))?/i
+    TITLE_KEYWORDS       = %w[hotel resort spa beach aquapark aqua park lake river club].freeze
+    TITLE_KEYWORDS_REGEX = /\b(#{TITLE_KEYWORDS.join('|')})\b/i
+
+    def initialize(html, base_url: nil, selectors: DEFAULT_SELECTORS)
+      @html        = html.to_s
+      @base_url    = base_url
+      @selectors   = selectors
+      @diagnostics = {
+        selectors:                selectors,
+        candidate_nodes:          0,
+        filtered_nodes:           0,
+        offers:                   0,
+        keyword_title_hits:       0,
+        price_strategy_hits:      Hash.new(0),
+        image_alt_hits:           0,
+        filtered_missing_keyword: 0,
+        filtered_missing_price:   0,
+        filtered_missing_term:    0
+      }
+    end
+
+    def offers
+      return [] if @html.start_with?('<!-- fetch') || @html.strip.empty?
+      doc                            = Nokogiri::HTML(@html)
+      nodes                          = candidate_nodes(doc)
+      @diagnostics[:candidate_nodes] = nodes.size
+      filtered                       = nodes.select { |n| text_density(n) }
+      @diagnostics[:filtered_nodes]  = filtered.size
+      parsed                         = filtered.map { |n| extract_offer(n) }.compact
+      uniq                           = {}
+      parsed.each do |o|
+        key       = [o[:name], o[:url]].join('::')
+        uniq[key] ||= o
+      end
+      final                 = uniq.values
+      @diagnostics[:offers] = final.size
+      final
+    end
+
+    def diagnostics
+      @diagnostics
+    end
+
+    private
+
+    def candidate_nodes(doc)
+      base     = @selectors.flat_map { |sel| doc.css(sel) }
+      expanded = base.map do |n|
+        if n.at_css('h1,h2,h3,h4,h5,h6')
+          n
+        else
+          ancestor = n.ancestors.find { |a| a.at_css('h1,h2,h3,h4,h5,h6') }
+          ancestor || n
+        end
+      end
+      expanded.uniq
+    end
+
+    # text_density now simplified – filtering logic moved above the parser
+    def text_density(node)
+      txt = node.text.strip
+      txt.length.between?(25, 800) # heuristic
+    end
+
+    def extract_offer(node)
+      text = squash(node.text)
+      name = extract_title(node, text)
+      return nil if name.nil? || name.length < 5
+
+      unless name =~ TITLE_KEYWORDS_REGEX
+        @diagnostics[:filtered_missing_keyword] += 1
+        return nil
+      end
+
+      anchor   = pick_anchor(node)
+      link_url = anchor ? absolutize_url(anchor['href']) : nil
+
+      price_data = extract_price_dom(node) || extract_price_regex(text)
+      unless price_data
+        @diagnostics[:filtered_missing_price] += 1
+        return nil
+      end
+
+      range_str = extract_date_range(text)
+      unless range_str
+        date_value = extract_date(text)
+        range_str  = date_value&.strftime('%Y-%m-%d') if date_value
+      end
+      unless range_str
+        @diagnostics[:filtered_missing_term] += 1
+        return nil
+      end
+
+      # images are lazy loaded on itaka
+      image_url = extract_image_url(node, anchor)
+      image_url ||= extract_image_by_alt(node, name)
+      country   = extract_country(node)
+
+      {
+        name:      name,
+        price:     price_data&.dig(:amount),
+        price_raw: price_data&.dig(:raw),
+        starts_on: range_str,
+        url:       link_url,
+        image_url: image_url,
+        country:   country
+      }
+    end
+
+    def extract_title(node, full_text)
+      # 1. Headings (h1–h6) with an anchor and a keyword
+      heading_links = node.css('h1 a, h2 a, h3 a, h4 a, h5 a, h6 a')
+      preferred     = heading_links.find { |a| a.text =~ TITLE_KEYWORDS_REGEX }
+      if preferred
+        txt                               = preferred.text.strip
+        @diagnostics[:keyword_title_hits] += 1
+        return txt
+      end
+      # 2. Any heading containing a keyword
+      with_kw = node.css('h1, h2, h3, h4, h5, h6').find { |h| h.text =~ TITLE_KEYWORDS_REGEX }
+      if with_kw
+        txt                               = with_kw.text.strip
+        @diagnostics[:keyword_title_hits] += 1
+        return txt
+      end
+      # 3. First heading if present (even without a keyword)
+      any_h = node.at_css('h1, h2, h3, h4, h5, h6')
+      return any_h.text.strip if any_h&.text&.strip&.length.to_i >= 5
+
+      lines = full_text.lines.map { |l| l.strip }.reject(&:empty?)
+      # Filter out lines that are clearly price/financial
+      price_tokens = /(\bzł\b|\/os\.|PLN|EUR|USD|GBP|\d+\s?zł|TFG|TFP)/i
+      cleaned      = lines.reject { |l| l =~ PRICE_REGEX || l =~ price_tokens }
+      # Prioritize lines containing a keyword
+      kw_lines = cleaned.select { |l| l =~ TITLE_KEYWORDS_REGEX }
+      unless kw_lines.empty?
+        chosen                            = kw_lines.max_by(&:length)
+        @diagnostics[:keyword_title_hits] += 1
+        return chosen
+      end
+      # Fallback: pick the longest reasonable from the cleaned set
+      cleaned.find { |l| l.length >= 5 }
+    end
+
+    def extract_price_dom(node)
+      # Preferred: a node with data-testid="current-price" and the value in a descendant span (e.g., span[data-price-catalog-code] or a class containing 'value')
+      container = node.at_css('[data-testid="current-price"]')
+      return nil unless container
+      value_node = container.at_css('[data-price-catalog-code]') || container.at_css('span[class*="value"]') || container
+      raw_text   = value_node.text.strip
+      # Discard if the text does not include a price pattern with 'zł'
+      return nil unless raw_text.match?(/\d+\s?\d*\s*zł/i)
+      numeric = raw_text.gsub(/[^0-9]/, '')
+      return nil if numeric.empty?
+      amount                                   = numeric.to_f
+      @diagnostics[:price_strategy_hits][:dom] += 1
+      { amount: amount, raw: raw_text }
+    end
+
+    def extract_price_regex(text)
+      m = text.match(PRICE_REGEX)
+      return nil unless m
+      amount_str = m[:amount].gsub(/[\s,]/, '').tr(',', '.')
+      amount     = amount_str.to_f
+      # Reconstruct the raw format with an optional 'zł' suffix if present in the original
+      raw_match                                  = text[/\b#{Regexp.escape(m[:amount])}\b[^\n]{0,10}zł/i]
+      raw_text                                   = raw_match ? raw_match.strip : m[:amount]
+      @diagnostics[:price_strategy_hits][:regex] += 1
+      { amount: amount, raw: raw_text }
+    end
+
+    def normalize_currency(cur)
+      return nil if cur.nil?
+      c = cur.strip.upcase
+      return 'PLN' if c == 'ZŁ'
+      return 'EUR' if c == '€'
+      return 'USD' if c == '$'
+      return 'GBP' if c == '£'
+      c
+    end
+
+    def extract_date(text)
+      m = text.match(DATE_REGEX)
+      return nil unless m
+      raw = m[0]
+      begin
+        # Normalize simple formats
+        cleaned = raw.tr('.', '-').tr('/', '-').split('-').map { |p| p.rjust(2, '0') }.join('-')
+        Date.parse(cleaned) rescue nil
+      rescue
+        nil
+      end
+    end
+
+    def pick_anchor(node)
+      anchors = node.css('a[href]')
+      return nil if anchors.empty?
+      # Reuse scoring logic from extract_primary_link
+      scored = anchors.map do |a|
+        href  = a['href'].to_s
+        score = 0
+        score += 70 if href.include?('?id=')
+        score += 50 if href.match?(/\/wczasy\//)
+        score += 30 if a.text =~ TITLE_KEYWORDS_REGEX
+        score += 10 if href.length > 60
+        score += 5 if href.count('/') > 3
+        { node: a, score: score }
+      end
+      (scored.max_by { |h| h[:score] })[:node]
+    rescue
+      nil
+    end
+
+    def extract_image_url(node, anchor)
+      # Look for an image in the following places, in this order:
+      # 1) within the same node container
+      # 2) in the nearest ancestors (up to 5 levels)
+      # 3) globally: an img associated with the same anchor (if present)
+      # 4) parse srcset if src/data-scrollspy are missing
+      scopes = [node]
+      scopes += node.ancestors.take(5)
+
+      href = anchor&.[]('href')
+
+      candidates = []
+      scopes.each do |scope|
+        candidates += scope.css('img[data-testid="gallery-img"]')
+        # additional fallback for <picture> -> <img>
+        candidates += scope.css('picture img')
+      end
+
+      if href
+        # Try to find an image in the card where the same href appears (not necessarily as the img's parent)
+        link_nodes = node.document.css("a[href='#{href}']")
+        link_nodes.each do |ln|
+          container  = ln.ancestors.find { |anc| anc.css('img').any? } || ln.parent
+          candidates += container.css('img[data-testid="gallery-img"], picture img') if container
+        end
+      end
+
+      # Filter duplicates while preserving order
+      candidates = candidates.uniq
+
+      # Pick the first that has any usable source
+      img = candidates.find do |i|
+        (i['src'] && !i['src'].empty?) || (i['data-scrollspy'] && !i['data-scrollspy'].empty?) || (i['srcset'] && !i['srcset'].empty?)
+      end
+      return nil unless img
+
+      src = img['src']
+      src ||= img['data-scrollspy']
+      src ||= pick_best_from_srcset(img['srcset']) if img['srcset']
+      return nil unless src
+
+      return src if src.start_with?('http://', 'https://') || @base_url.nil?
+      absolutize_url(src)
+    rescue
+      nil
+    end
+
+    def pick_best_from_srcset(srcset)
+      return nil if srcset.nil? || srcset.strip.empty?
+      # srcset: "url1 100w, url2 576w, url3 1200w"
+      pairs = srcset.split(',').map(&:strip).map do |entry|
+        if entry =~ /(\S+)\s+(\d+)w/
+          [$1, $2.to_i]
+        else
+          [entry, 0]
+        end
+      end
+      best  = pairs.max_by { |(_, w)| w }
+      best&.first
+    rescue
+      nil
+    end
+
+    def extract_image_by_alt(node, name)
+      return nil unless name
+      name_tokens = name.downcase.split(/[^a-z0-9ąęśćłóżźń]+/i).reject(&:empty?)
+      imgs        = node.document.css('img[alt]')
+      scored      = imgs.map do |img|
+        alt = img['alt'].to_s.strip
+        next if alt.empty?
+        alt_down      = alt.downcase
+        keyword_bonus = TITLE_KEYWORDS.any? { |kw| alt_down.include?(kw) } ? 10 : 0
+        overlap       = (name_tokens & alt_down.split(/[^a-z0-9ąęśćłóżźń]+/i)).size
+        score         = overlap * 5 + keyword_bonus - (alt.length - name.length).abs * 0.01
+        { img: img, score: score, alt: alt }
+      end.compact
+      best        = scored.max_by { |h| h[:score] }
+      return nil unless best && best[:score] > 0
+      @diagnostics[:image_alt_hits] += 1
+      img                           = best[:img]
+      src                           = img['src']
+      src                           = nil if src.nil? || src.empty?
+      src                           ||= img['data-scrollspy']
+      src                           ||= pick_best_from_srcset(img['srcset'])
+      return nil unless src
+      return src if src.start_with?('http://', 'https://') || @base_url.nil?
+      absolutize_url(src)
+    rescue
+      nil
+    end
+
+    def extract_country(node)
+      dest = node.at_css('[data-testid="offer-list-item-destination"] a')
+      dest&.text&.strip
+    end
+
+    def extract_primary_link(node)
+      anchors = node.css('a[href]')
+      return nil if anchors.empty?
+
+      # 1. If there is an anchor within an h1–h6 heading that contains a keyword and the href includes id= or /wczasy/, take it.
+      heading_priority = anchors.select do |a|
+        parent_h = a.ancestors.find { |anc| anc.name =~ /h[1-6]/ }
+        next false unless parent_h
+        href = a['href'].to_s
+        kw   = a.text =~ TITLE_KEYWORDS_REGEX
+        long = href.include?('?id=') || href.match?(/\/wczasy\//)
+        kw && long
+      end
+      unless heading_priority.empty?
+        return absolutize_url(heading_priority.first['href'])
+      end
+
+      # 2. Anchors with ?id= have high priority.
+      scored = anchors.map do |a|
+        href  = a['href'].to_s
+        score = 0
+        score += 60 if href.include?('?id=')
+        score += 40 if href.match?(/\/wczasy\//)
+        score += 25 if a.text =~ TITLE_KEYWORDS_REGEX
+        score += 10 if href.length > 60
+        score += 5 if href.count('/') > 3
+        { node: a, href: href, score: score }
+      end
+
+      best = scored.max_by { |h| h[:score] }
+      return absolutize_url(best[:href]) if best && best[:score] > 0
+
+      # 3. Fallback: the longest href.
+      longest = anchors.max_by { |a| a['href'].to_s.length }
+      absolutize_url(longest['href'])
+    end
+
+    def absolutize_url(href)
+      return nil if href.nil? || href.empty?
+      return href if href.start_with?('http://', 'https://') || @base_url.nil?
+      URI.join(@base_url, href).to_s
+    rescue
+      href
+    end
+
+    def extract_date_range(text)
+      m = text.match(DATE_RANGE_REGEX)
+      return nil unless m
+      sday          = m[:sday]
+      smonth        = m[:smonth]
+      syear         = m[:syear]
+      eday          = m[:eday]
+      emonth        = m[:emonth]
+      eyear         = m[:eyear]
+      days_explicit = m[:days]
+
+      begin
+        year_for_start = (syear || eyear)
+        start_str      = [sday, smonth, year_for_start].join('.')
+        end_str        = [eday, emonth, eyear].join('.')
+        sd             = Date.strptime(start_str, '%d.%m.%Y')
+        ed             = Date.strptime(end_str, '%d.%m.%Y')
+        computed_days  = (ed - sd).to_i
+        days_part      = days_explicit ? "(#{days_explicit} dni)" : "(#{computed_days} dni)"
+        # Original display keeps start without repeating year if absent initially
+        start_display = syear ? start_str : [sday, smonth].join('.')
+        "#{start_display} - #{end_str} #{days_part}".strip
+      rescue
+        nil
+      end
+    end
+
+    def squash(str)
+      str.gsub(/\s+/, ' ').strip
+    end
+  end
+end
