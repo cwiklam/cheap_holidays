@@ -15,7 +15,7 @@ end
 
 class TuiScraper
   OFFER_CONTAINER_SELECTOR = 'div.offer-tile-wrapper.offer-tile-wrapper--listingOffer'
-  HOTEL_NAME_SELECTOR      = 'span.offer-tile-body__hotel-name'
+  HOTEL_NAME_SELECTOR      = 'header.offer-tile-body__header span'
   PRICE_SELECTOR           = 'span.price-value__amount, [data-testid="price-amount"]'
   DATE_RANGE_REGEX         = /\b\d{2}\.\d{2}\.\d{4}\s*[-–]\s*\d{2}\.\d{2}\.\d{4}\b/
 

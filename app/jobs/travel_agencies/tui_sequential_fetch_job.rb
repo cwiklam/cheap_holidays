@@ -14,7 +14,6 @@ module TravelAgencies
     def perform(page: 1, query: nil, max_pages: 100)
       agency = ::TravelAgency.find_by(name_id: 'tui')
       return unless agency
-
       # Prefer browser-driven flow if Ferrum is available; fallback to legacy HTTP pagination
       if ferrum_available?
         perform_with_browser(agency, query: query, max_pages: max_pages)
